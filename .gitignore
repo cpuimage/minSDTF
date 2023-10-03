@@ -1,0 +1,4 @@
+/stable_diffusion/__internal__/layers/__pycache__/*.pyc
+*.pyc
+/stable_diffusion/__internal__/__pycache__/*.pyc
+/stable_diffusion/__pycache__/*.pyc
