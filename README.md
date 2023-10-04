@@ -64,6 +64,7 @@ img = model.text_to_image(
     seed=123456,
     control_net_image=np.expand_dims(canny, axis=0).astype(np.float32) / 255.0
 )
+Image.fromarray(img[0]).save("out.jpg")
 ```
 
 * TODO
