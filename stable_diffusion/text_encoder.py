@@ -126,7 +126,7 @@ class TextClipEmbedding(tf.keras.Model):
 
 class TextEncoder(tf.keras.Model):
     def __init__(self, max_length=77, embed_dim=768, num_heads=12, num_layers=12, clip_skip=-2, name=None,
-                 ckpt_path=None):
+                 ckpt_path=None, lora_dict=None):
         clip_emb = tf.keras.layers.Input(shape=(max_length, embed_dim), dtype="float32", name="clip_emb")
         x = clip_emb
         out = []
@@ -160,10 +160,10 @@ class TextEncoder(tf.keras.Model):
         ckpt_mapping.append(('text_model.final_layer_norm.bias', None))
         if ckpt_path is not None:
             if os.path.exists(ckpt_path):
-                load_weights_from_file(self, ckpt_path, ckpt_mapping=ckpt_mapping)
+                load_weights_from_file(self, ckpt_path, ckpt_mapping=ckpt_mapping, lora_dict=lora_dict)
                 return
             else:
                 origin = ckpt_path
         model_weights_fpath = tf.keras.utils.get_file(origin=origin)
         if os.path.exists(model_weights_fpath):
-            load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping)
+            load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping, lora_dict=lora_dict)

@@ -2133,7 +2133,7 @@ CKPT_MAPPING = {
 }
 
 
-def load_weights_from_file(self, ckpt_path, ckpt_mapping, key_mapping=None):
+def load_weights_from_file(self, ckpt_path, ckpt_mapping, key_mapping=None, lora_dict=None):
     filename = os.path.basename(ckpt_path)
     print("{} loading:[{}]".format(self.name, filename))
     state_dict = {}
@@ -2147,6 +2147,12 @@ def load_weights_from_file(self, ckpt_path, ckpt_mapping, key_mapping=None):
     weights = self.weights
     module_weights = []
     keys = state_dict.keys()
+    if lora_dict is not None:
+        lora_keys = lora_dict.keys()
+    else:
+        lora_keys = []
+    lora_count = len(lora_keys)
+    lora_idx = 0
     for i, (key, perm) in enumerate(ckpt_mapping):
         if isinstance(perm, str) and perm.endswith(".npy"):
             w = np.load(perm)
@@ -2160,10 +2166,82 @@ def load_weights_from_file(self, ckpt_path, ckpt_mapping, key_mapping=None):
                 w = state_dict[key]
             if isinstance(w, torch.Tensor):
                 w = w.detach().numpy()
+            if lora_dict is not None:
+                if key_mapping is not None:
+                    lora_w = lora_dict.get(str(key_mapping.get(key, None)), None)
+                else:
+                    lora_w = lora_dict.get(key, None)
+                if lora_w is not None:
+                    w = w + lora_w
+                    lora_idx += 1
             if perm is not None:
                 w = np.transpose(w, perm)
         if weights[i].shape != w.shape:
             print("Wrong :[{},{}]".format(weights[i].name, key))
         module_weights.append(w)
+    if lora_count > 0:
+        if lora_idx == lora_count:
+            print("Apply {} lora weights".format(lora_count))
+        else:
+            print("Apply {}/{} lora weights".format(lora_idx, lora_count))
     self.set_weights(module_weights)
     print("Loaded %d weights for %s" % (len(module_weights), self.name))
+
+
+def load_weights_from_lora(ckpt_path):
+    state_dict = {}
+    if ckpt_path.endswith(".safetensors"):
+        with safe_open(ckpt_path, framework="pt", device="cpu") as f:
+            for key in f.keys():
+                state_dict[key] = f.get_tensor(key)
+    else:
+        state_dict = torch.load(ckpt_path, map_location="cpu")
+    state_dict_keys = list(state_dict.keys())
+    unet_state_dict = {}
+    text_encoder_state_dict = {}
+    for idx, key in enumerate(state_dict_keys):
+        if str(key).endswith(".alpha"):
+            name = str(key).split(".alpha")[0]
+            alpha = state_dict[name + ".alpha"]
+            lora_down = state_dict[name + ".lora_down.weight"]
+            lora_up = state_dict[name + ".lora_up.weight"]
+            if isinstance(lora_down, torch.Tensor):
+                lora_down = lora_down.detach().numpy()
+            if isinstance(lora_up, torch.Tensor):
+                lora_up = lora_up.detach().numpy()
+            if isinstance(alpha, torch.Tensor):
+                alpha = alpha.detach().numpy()
+            rank = float(lora_up.shape[1])
+            w = np.einsum("ab...,bc...->ac...", lora_up, lora_down) * (alpha / rank)
+            str_key = str(key)
+            # todo : a more elegant implementation is needed
+            if str_key.startswith("lora_te_text_model"):
+                restore_name = name.replace("lora_te_text_model_encoder_layers_", '')
+                restore_name = restore_name.replace("_mlp_fc1", '.mlp.fc1.weight')
+                restore_name = restore_name.replace("_mlp_fc2", '.mlp.fc2.weight')
+                restore_name = restore_name.replace("_self_attn_q_proj", '.self_attn.q_proj.weight')
+                restore_name = restore_name.replace("_self_attn_v_proj", '.self_attn.v_proj.weight')
+                restore_name = restore_name.replace("_self_attn_k_proj", '.self_attn.k_proj.weight')
+                restore_name = restore_name.replace("_self_attn_out_proj", '.self_attn.out_proj.weight')
+                restore_name = 'text_model.encoder.layers.' + restore_name
+                text_encoder_state_dict[restore_name] = w
+            elif str_key.startswith("lora_unet_"):
+                restore_name = name.replace("lora_unet_", '')
+                restore_name = restore_name.replace("down_blocks_", 'down_blocks.')
+                restore_name = restore_name.replace("up_blocks_", 'up_blocks.')
+                restore_name = restore_name.replace("_attentions_", '.attentions.')
+                restore_name = restore_name.replace("_transformer_blocks_", '.transformer_blocks.')
+                restore_name = restore_name.replace("_proj_in", '.proj_in.weight')
+                restore_name = restore_name.replace("_proj_out", '.proj_out.weight')
+                restore_name = restore_name.replace("_attn1_to_k", '.attn1.to_k.weight')
+                restore_name = restore_name.replace("_attn2_to_k", '.attn2.to_k.weight')
+                restore_name = restore_name.replace("_attn1_to_q", '.attn1.to_q.weight')
+                restore_name = restore_name.replace("_attn2_to_q", '.attn2.to_q.weight')
+                restore_name = restore_name.replace("_attn1_to_v", '.attn1.to_v.weight')
+                restore_name = restore_name.replace("_attn2_to_v", '.attn2.to_v.weight')
+                restore_name = restore_name.replace("_attn1_to_out_0", '.attn1.to_out.0.weight')
+                restore_name = restore_name.replace("_attn2_to_out_0", '.attn2.to_out.0.weight')
+                restore_name = restore_name.replace("_ff_net_0_proj", '.ff.net.0.proj.weight')
+                restore_name = restore_name.replace("_ff_net_2", '.ff.net.2.weight')
+                unet_state_dict[restore_name] = w
+    return text_encoder_state_dict, unet_state_dict

@@ -65,6 +65,15 @@ img = model.text_to_image(
     control_net_image=np.expand_dims(canny, axis=0).astype(np.float32) / 255.0
 )
 Image.fromarray(img[0]).save("out.jpg")
+
+# for lora
+model = StableDiffusion(img_height=512, img_width=512, jit_compile=True, lora_path="/path/to/lora.safetensors")
+img = model.text_to_image(
+    "a cute girl.",
+    num_steps=25,
+    seed=123456,
+)
+Image.fromarray(img[0]).save("out.jpg") 
 ```
 
 * TODO
@@ -72,8 +81,8 @@ Image.fromarray(img[0]).save("out.jpg")
     - [x] Clip Skip
     - [x] Textual Inversion
     - [x] ControlNet
+    - [x] Lora
     - [ ] Long Prompt Weighting
-    - [ ] Standard Lora
 
 Distributed under the MIT License. See `LICENSE` for more information.
 

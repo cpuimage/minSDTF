@@ -31,6 +31,7 @@ import tensorflow as tf
 import torch
 from PIL import Image
 
+from .ckpt_loader import load_weights_from_lora
 from .clip_tokenizer import SimpleTokenizer
 from .control_net import ControlNet, HintNet
 from .diffusion_model import DiffusionModel
@@ -434,13 +435,20 @@ class StableDiffusion(StableDiffusionBase):
             img_height=512,
             img_width=512,
             jit_compile=False,
-            clip_skip=-2,
+            clip_skip=-1,
             civitai_model=None,
+            lora_path=None,
             controlnet_path=None):
         super().__init__(img_height, img_width, jit_compile)
         self.clip_skip = clip_skip
         self.civitai_model = civitai_model
         self.controlnet_path = controlnet_path
+        self.lora_path = None
+        self.text_encoder_lora_dict = None
+        self.unet_lora_dict = None
+        if os.path.exists(lora_path):
+            self.text_encoder_lora_dict, self.unet_lora_dict = load_weights_from_lora(lora_path)
+            self.lora_path = lora_path
         print(
             "By using this model checkpoint, you acknowledge that its usage is "
             "subject to the terms of the CreativeML Open RAIL-M license at "
@@ -454,7 +462,7 @@ class StableDiffusion(StableDiffusionBase):
         needs to be modified.
         """
         if self._text_encoder is None:
-            self._text_encoder = TextEncoder(MAX_PROMPT_LENGTH, clip_skip=self.clip_skip)
+            self._text_encoder = TextEncoder(MAX_PROMPT_LENGTH, clip_skip=self.clip_skip, lora_dict=self.text_encoder_lora_dict)
             if self.jit_compile:
                 self._text_encoder.compile(jit_compile=True)
         return self._text_encoder
@@ -497,7 +505,7 @@ class StableDiffusion(StableDiffusionBase):
         if self._diffusion_model is None:
             self._diffusion_model = DiffusionModel(
                 self.img_height, self.img_width, MAX_PROMPT_LENGTH, ckpt_path=self.civitai_model,
-                apply_control_net=self.controlnet_path is not None)
+                apply_control_net=self.controlnet_path is not None, lora_dict=self.unet_lora_dict)
             if self.jit_compile:
                 self._diffusion_model.compile(jit_compile=True)
         return self._diffusion_model

@@ -158,7 +158,8 @@ def td_dot(a, b):
 
 
 class DiffusionModel(tf.keras.Model):
-    def __init__(self, img_height, img_width, max_text_length, apply_control_net=False, name=None, ckpt_path=None):
+    def __init__(self, img_height=512, img_width=512, max_text_length=77, apply_control_net=False, name=None,
+                 ckpt_path=None, lora_dict=None):
         context = tf.keras.layers.Input((max_text_length, 768))
         t_embed_input = tf.keras.layers.Input((320,))
         latent = tf.keras.layers.Input((img_height // 8, img_width // 8, 4))
@@ -281,10 +282,12 @@ class DiffusionModel(tf.keras.Model):
         ckpt_mapping = CKPT_MAPPING["civitai_model"]
         if ckpt_path is not None:
             if os.path.exists(ckpt_path):
-                load_weights_from_file(self, ckpt_path, ckpt_mapping=ckpt_mapping, key_mapping=UNET_KEY_MAPPING)
+                load_weights_from_file(self, ckpt_path, ckpt_mapping=ckpt_mapping, key_mapping=UNET_KEY_MAPPING,
+                                       lora_dict=lora_dict)
                 return
             else:
                 origin = ckpt_path
         model_weights_fpath = tf.keras.utils.get_file(origin=origin)
         if os.path.exists(model_weights_fpath):
-            load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping, key_mapping=UNET_KEY_MAPPING)
+            load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping, key_mapping=UNET_KEY_MAPPING,
+                                   lora_dict=lora_dict)
