@@ -15,7 +15,7 @@ import os
 
 import tensorflow as tf
 
-from .ckpt_loader import load_weights_from_file, CKPT_MAPPING
+from .ckpt_loader import load_weights_from_file, CKPT_MAPPING, UNET_KEY_MAPPING
 from .layers import PaddedConv2D
 
 
@@ -281,10 +281,10 @@ class DiffusionModel(tf.keras.Model):
         ckpt_mapping = CKPT_MAPPING["civitai_model"]
         if ckpt_path is not None:
             if os.path.exists(ckpt_path):
-                load_weights_from_file(self, ckpt_path, ckpt_mapping=ckpt_mapping)
+                load_weights_from_file(self, ckpt_path, ckpt_mapping=ckpt_mapping, key_mapping=UNET_KEY_MAPPING)
                 return
             else:
                 origin = ckpt_path
         model_weights_fpath = tf.keras.utils.get_file(origin=origin)
         if os.path.exists(model_weights_fpath):
-            load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping)
+            load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping, key_mapping=UNET_KEY_MAPPING)
