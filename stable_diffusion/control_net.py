@@ -43,8 +43,8 @@ class HintNet(tf.keras.Sequential):
 
 
 class ControlNet(tf.keras.Model):
-    def __init__(self, img_height=512, img_width=512, max_text_length=77, name=None, controlnet_path=None):
-        context = tf.keras.layers.Input((max_text_length, 768))
+    def __init__(self, img_height=512, img_width=512, name=None, controlnet_path=None):
+        context = tf.keras.layers.Input((None, 768))
         t_embed_input = tf.keras.layers.Input((320,))
         latent = tf.keras.layers.Input((img_height // 8, img_width // 8, 4))
         hint_out = tf.keras.layers.Input((img_height // 8, img_width // 8, 320))

@@ -2189,6 +2189,7 @@ def load_weights_from_file(self, ckpt_path, ckpt_mapping, key_mapping=None, lora
 
 
 def load_weights_from_lora(ckpt_path):
+    print("loading:[{}]".format(ckpt_path))
     state_dict = {}
     if ckpt_path.endswith(".safetensors"):
         with safe_open(ckpt_path, framework="pt", device="cpu") as f:
@@ -2196,9 +2197,11 @@ def load_weights_from_lora(ckpt_path):
                 state_dict[key] = f.get_tensor(key)
     else:
         state_dict = torch.load(ckpt_path, map_location="cpu")
+    print("loaded :[{}]".format(ckpt_path))
     state_dict_keys = list(state_dict.keys())
     unet_state_dict = {}
     text_encoder_state_dict = {}
+    print("try build lora dict:[{}]".format(ckpt_path))
     for idx, key in enumerate(state_dict_keys):
         if str(key).endswith(".alpha"):
             name = str(key).split(".alpha")[0]
@@ -2244,4 +2247,5 @@ def load_weights_from_lora(ckpt_path):
                 restore_name = restore_name.replace("_ff_net_0_proj", '.ff.net.0.proj.weight')
                 restore_name = restore_name.replace("_ff_net_2", '.ff.net.2.weight')
                 unet_state_dict[restore_name] = w
+    print("lora dict:[{}] done.".format(ckpt_path))
     return text_encoder_state_dict, unet_state_dict

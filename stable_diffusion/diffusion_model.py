@@ -110,17 +110,20 @@ class CrossAttention(tf.keras.layers.Layer):
         inputs, context = inputs
         context = inputs if context is None else context
         q, k, v = self.to_q(inputs), self.to_k(context), self.to_v(context)
-        q = tf.reshape(q, (-1, inputs.shape[1], self.num_heads, self.head_size))
-        k = tf.reshape(k, (-1, context.shape[1], self.num_heads, self.head_size))
-        v = tf.reshape(v, (-1, context.shape[1], self.num_heads, self.head_size))
+        batch_size = tf.shape(inputs)[0]
+        q = tf.reshape(q, (batch_size, inputs.shape[1], self.num_heads, self.head_size))
+        k = tf.reshape(k, (batch_size, -1, self.num_heads, self.head_size))
+        v = tf.reshape(v, (batch_size, -1, self.num_heads, self.head_size))
 
         q = tf.transpose(q, (0, 2, 1, 3))  # (bs, num_heads, time, head_size)
         k = tf.transpose(k, (0, 2, 3, 1))  # (bs, num_heads, head_size, time)
         v = tf.transpose(v, (0, 2, 1, 3))  # (bs, num_heads, time, head_size)
 
-        score = td_dot(q, k) * self.scale
+        # score = td_dot(q, k) * self.scale
+        score = tf.einsum('bnqh,bnhk->bnqk', q, k) * self.scale
         weights = tf.keras.activations.softmax(score)  # (bs, num_heads, time, time)
-        attn = td_dot(weights, v)
+        # attn = td_dot(weights, v)
+        attn = tf.einsum('bnqk,bnkh->bnqh', weights, v)
         attn = tf.transpose(attn, (0, 2, 1, 3))  # (bs, time, num_heads, head_size)
         out = tf.reshape(attn, (-1, inputs.shape[1], self.num_heads * self.head_size))
         return self.out_proj(out)
@@ -158,9 +161,9 @@ def td_dot(a, b):
 
 
 class DiffusionModel(tf.keras.Model):
-    def __init__(self, img_height=512, img_width=512, max_text_length=77, apply_control_net=False, name=None,
+    def __init__(self, img_height=512, img_width=512, apply_control_net=False, name=None,
                  ckpt_path=None, lora_dict=None):
-        context = tf.keras.layers.Input((max_text_length, 768))
+        context = tf.keras.layers.Input((None, 768))
         t_embed_input = tf.keras.layers.Input((320,))
         latent = tf.keras.layers.Input((img_height // 8, img_width // 8, 4))
         controls = None

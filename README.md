@@ -74,6 +74,16 @@ img = model.text_to_image(
     seed=123456,
 )
 Image.fromarray(img[0]).save("out.jpg") 
+
+# for long prompt weighting
+model = StableDiffusion(img_height=512, img_width=512, jit_compile=True)
+img = model.text_to_image( 
+    prompt="best_quality (1girl:1.3) bow bride brown_hair closed_mouth frilled_bow frilled_hair_tubes frills (full_body:1.3) fox_ear hair_bow hair_tubes happy hood japanese_clothes kimono long_sleeves red_bow smile solo tabi uchikake white_kimono wide_sleeves cherry_blossoms",
+    negative_prompt="lowres, bad_anatomy, error_body, error_hair, error_arm, error_hands, bad_hands, error_fingers, bad_fingers, missing_fingers, error_legs, bad_legs, multiple_legs, missing_legs, error_lighting, error_shadow, error_reflection, text, error, extra_digit, fewer_digits, cropped, worst_quality, low_quality, normal_quality, jpeg_artifacts, signature, watermark, username, blurry",
+    num_steps=25,
+    seed=123456, 
+)
+Image.fromarray(img[0]).save("out.jpg")
 ```
 
 * TODO
@@ -82,7 +92,7 @@ Image.fromarray(img[0]).save("out.jpg")
     - [x] Textual Inversion
     - [x] ControlNet
     - [x] Lora
-    - [ ] Long Prompt Weighting
+    - [x] Long Prompt Weighting
 
 Distributed under the MIT License. See `LICENSE` for more information.
 

@@ -37,6 +37,7 @@ from .control_net import ControlNet, HintNet
 from .diffusion_model import DiffusionModel
 from .image_decoder import ImageDecoder
 from .image_encoder import ImageEncoder
+from .long_prompt_weighting import get_weighted_text_embeddings
 from .text_encoder import TextEncoder, TextClipEmbedding
 
 MAX_PROMPT_LENGTH = 77
@@ -90,7 +91,8 @@ class StableDiffusionBase:
             unconditional_guidance_scale=7.5,
             embedding=None,
             negative_embedding=None,
-            seed=None, control_net_image=None):
+            seed=None,
+            control_net_image=None):
         encoded_text = self.encode_text(prompt, embedding)
 
         return self.generate_image(
@@ -126,8 +128,8 @@ class StableDiffusionBase:
         ```
         """
         # Tokenize prompt (i.e. starting context)
-        inputs = self.tokenizer.encode(prompt)
         embedding_tokens_count = 0
+        embedding =None
         if embedding_data is not None:
             if isinstance(embedding_data, str):
                 embedding = self.load_embedding(embedding_data)
@@ -137,20 +139,11 @@ class StableDiffusionBase:
                 else:
                     raise ValueError(
                         f"failed to load embedding file: {embedding_data}.")
-        for idx in range(embedding_tokens_count):
-            inputs.insert(1, 0)
-        if len(inputs) > MAX_PROMPT_LENGTH:
-            raise ValueError(
-                f"Prompt is too long (should be <= {MAX_PROMPT_LENGTH} tokens)")
-        phrase = inputs + [49407] * (MAX_PROMPT_LENGTH - len(inputs))
-        phrase = tf.convert_to_tensor([phrase], dtype=tf.int32)
-        clip_embedding = self.text_clip_embedding.predict_on_batch([phrase, self._get_pos_ids()])
-        if embedding_tokens_count > 0:
-            clip_embedding = np.concatenate(
-                [clip_embedding[:, 0:1, :],
-                 np.tile(embedding, (clip_embedding.shape[0], 1, 1)).astype(clip_embedding.dtype),
-                 clip_embedding[:, embedding_tokens_count + 1:, :]], axis=1)
-        context = self.text_encoder.predict_on_batch(clip_embedding)
+        pad_token_id = 49407
+        context = get_weighted_text_embeddings(self.tokenizer, self.text_clip_embedding, self.text_encoder, prompt,
+                                               model_max_length=MAX_PROMPT_LENGTH,
+                                               embedding=embedding, embedding_tokens_count=embedding_tokens_count,
+                                               pad_token_id=pad_token_id)
         return context
 
     def generate_image(
@@ -462,7 +455,8 @@ class StableDiffusion(StableDiffusionBase):
         needs to be modified.
         """
         if self._text_encoder is None:
-            self._text_encoder = TextEncoder(MAX_PROMPT_LENGTH, clip_skip=self.clip_skip, lora_dict=self.text_encoder_lora_dict)
+            self._text_encoder = TextEncoder(MAX_PROMPT_LENGTH, clip_skip=self.clip_skip,
+                                             lora_dict=self.text_encoder_lora_dict)
             if self.jit_compile:
                 self._text_encoder.compile(jit_compile=True)
         return self._text_encoder
@@ -478,8 +472,7 @@ class StableDiffusion(StableDiffusionBase):
     @property
     def control_net(self):
         if self._control_net is None:
-            self._control_net = ControlNet(self.img_height, self.img_width, MAX_PROMPT_LENGTH,
-                                           controlnet_path=self.controlnet_path)
+            self._control_net = ControlNet(self.img_height, self.img_width, controlnet_path=self.controlnet_path)
             if self.jit_compile:
                 self._control_net.compile(jit_compile=True)
         return self._control_net
@@ -504,7 +497,7 @@ class StableDiffusion(StableDiffusionBase):
         """
         if self._diffusion_model is None:
             self._diffusion_model = DiffusionModel(
-                self.img_height, self.img_width, MAX_PROMPT_LENGTH, ckpt_path=self.civitai_model,
+                self.img_height, self.img_width, ckpt_path=self.civitai_model,
                 apply_control_net=self.controlnet_path is not None, lora_dict=self.unet_lora_dict)
             if self.jit_compile:
                 self._diffusion_model.compile(jit_compile=True)
