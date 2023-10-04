@@ -70,7 +70,7 @@ class StableDiffusionBase:
 
     def load_embedding(self, embedding_path):
         embedding = None
-        if os.path.exists(embedding_path):
+        if os.path.exists(str(embedding_path)):
             state_dict = torch.load(embedding_path, map_location="cpu")
             key_str = "string_to_param"
             if key_str in state_dict.keys():
@@ -446,7 +446,7 @@ class StableDiffusion(StableDiffusionBase):
         self.lora_path = None
         self.text_encoder_lora_dict = None
         self.unet_lora_dict = None
-        if os.path.exists(lora_path):
+        if os.path.exists(str(lora_path)):
             self.text_encoder_lora_dict, self.unet_lora_dict = load_weights_from_lora(lora_path)
             self.lora_path = lora_path
         print(
