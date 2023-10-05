@@ -95,8 +95,10 @@ Image.fromarray(img[0]).save("out.jpg")
     - [x] Clip Skip
     - [x] Textual Inversion
     - [x] ControlNet
-    - [x] Lora
     - [x] Long Prompt Weighting
+    - [ ] Lora
+        - [x] Merge
+        - [ ] Switch
     - [ ] Multi-Textual Inversion
     - [ ] Image To Image
     - [ ] Inpainting
