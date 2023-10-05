@@ -93,6 +93,16 @@ Image.fromarray(img[0]).save("out.jpg")
     - [x] ControlNet
     - [x] Lora
     - [x] Long Prompt Weighting
+    - [ ] Multi-Textual Inversion
+    - [ ] Image To Image
+    - [ ] Inpainting
+    - [ ] Outpainting
+    - [ ] Upscaler
+    - [ ] Highres Fix
+    - [ ] Face Restoration
+    - [ ] Sampler
+    - [ ] Flash Attention
+    - [ ] Gui
 
 Distributed under the MIT License. See `LICENSE` for more information.
 
