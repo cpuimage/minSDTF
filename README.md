@@ -2,6 +2,10 @@
 
 Stable Diffusion V1.5 Inference With PyTorch Weights in TensorFlow 2
 
+## Why do this?
+
+While huggingface `diffusers` and AUTOMATIC1111 `webui` library is amazing, nowdays, its implementation has gotten extremely big and unfriendly for people who want to build on it. I've always wished that an implementation existed that was not only easy to learn but also easy to maintain and develop. so, I did this project. It's like building a bridge that is compatible with the resources of the active PyTorch community, but at the same time will have the multiple features of Keras/TensorFlow.
+
 #### Using pip without a virtual environment
 
 Install dependencies using the `requirements.txt` file:
