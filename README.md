@@ -119,7 +119,8 @@ Licenses for borrowed code can be found in following link:
 - ControlNet - https://github.com/lllyasviel/ControlNet
 - KerasCV - https://github.com/keras-team/keras-cv
 - Diffusers - https://github.com/huggingface/diffusers
-
+- Stable Diffusion Web UI - https://github.com/AUTOMATIC1111/stable-diffusion-webui
+  
 ## Models
 
 - ControlNet Models - https://huggingface.co/lllyasviel/ControlNet/tree/main/models
