@@ -1,6 +1,6 @@
 # minSDTF
 
-Stable Diffusion V1.5 Inference With PyTorch Weights in TensorFlow 2
+Stable Diffusion V1.5 Inference With PyTorch Weights And More Features Like Stable Diffusion Web UI In TensorFlow
 
 ## Why do this?
 
