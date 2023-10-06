@@ -23,13 +23,13 @@ Credits:
 The current implementation is a rewrite of the initial TF/Keras port by
 Divam Gupta.
 """
-import math
 import os
 
 import numpy as np
 import tensorflow as tf
 import torch
 from PIL import Image
+from scipy.ndimage import correlate1d
 
 from .ckpt_loader import load_weights_from_lora
 from .clip_tokenizer import SimpleTokenizer
@@ -67,7 +67,9 @@ class StableDiffusionBase:
         self._image_decoder = None
         self._tokenizer = None
         self.jit_compile = jit_compile
-        self.alphas_cumprod = np.cumprod(1.0 - np.square(np.linspace(np.sqrt(0.00085), np.sqrt(0.012), 1000)), axis=0)
+        self.alphas_cumprod = np.cumprod(1. - np.square(np.linspace(np.sqrt(0.00085), np.sqrt(0.012), 1000)), axis=0)
+        self.signal_rates = np.sqrt(self.alphas_cumprod)
+        self.noise_rates = np.sqrt(1. - self.alphas_cumprod)
 
     def load_embedding(self, embedding_path):
         embedding = None
@@ -105,6 +107,63 @@ class StableDiffusionBase:
             negative_embedding=negative_embedding,
             control_net_image=control_net_image)
 
+    def image_to_image(
+            self,
+            prompt,
+            negative_prompt=None,
+            batch_size=1,
+            num_steps=50,
+            unconditional_guidance_scale=7.5,
+            embedding=None,
+            negative_embedding=None,
+            seed=None,
+            control_net_image=None,
+            reference_image=None,
+            reference_image_strength=0.8):
+        encoded_text = self.encode_text(prompt, embedding)
+        return self.generate_image(
+            encoded_text,
+            negative_prompt=negative_prompt,
+            batch_size=batch_size,
+            num_steps=num_steps,
+            unconditional_guidance_scale=unconditional_guidance_scale,
+            seed=seed,
+            negative_embedding=negative_embedding,
+            control_net_image=control_net_image,
+            reference_image=reference_image,
+            reference_image_strength=reference_image_strength)
+
+    def inpaint(
+            self,
+            prompt,
+            negative_prompt=None,
+            batch_size=1,
+            num_steps=50,
+            unconditional_guidance_scale=7.5,
+            embedding=None,
+            negative_embedding=None,
+            seed=None,
+            control_net_image=None,
+            reference_image=None,
+            reference_image_strength=0.8,
+            inpaint_mask=None,
+            mask_blur_strength=5):
+        encoded_text = self.encode_text(prompt, embedding)
+
+        return self.generate_image(
+            encoded_text,
+            negative_prompt=negative_prompt,
+            batch_size=batch_size,
+            num_steps=num_steps,
+            unconditional_guidance_scale=unconditional_guidance_scale,
+            seed=seed,
+            negative_embedding=negative_embedding,
+            control_net_image=control_net_image,
+            reference_image=reference_image,
+            reference_image_strength=reference_image_strength,
+            inpaint_mask=inpaint_mask,
+            mask_blur_strength=mask_blur_strength)
+
     def encode_text(self, prompt, embedding_data=None):
         """Encodes a prompt into a latent text encoding.
 
@@ -129,7 +188,7 @@ class StableDiffusionBase:
         """
         # Tokenize prompt (i.e. starting context)
         embedding_tokens_count = 0
-        embedding =None
+        embedding = None
         if embedding_data is not None:
             if isinstance(embedding_data, str):
                 embedding = self.load_embedding(embedding_data)
@@ -146,6 +205,97 @@ class StableDiffusionBase:
                                                pad_token_id=pad_token_id)
         return context
 
+    def gaussian_blur(self, image, radius=3, h_axis=1, v_axis=2):
+        def build_filter1d(kernel_size):
+            if kernel_size == 1:
+                filter1d = [1]
+            else:
+                triangle = [[1, 1]]
+                for i in range(1, kernel_size - 1):
+                    cur_row = [1]
+                    prev_row = triangle[i - 1]
+                    for j in range(len(prev_row) - 1):
+                        cur_row.append(prev_row[j] + prev_row[j + 1])
+                    cur_row.append(1)
+                    triangle.append(cur_row)
+                filter1d = triangle[-1]
+            filter1d = np.reshape(filter1d, (kernel_size,))
+            return filter1d / np.sum(filter1d)
+
+        weights = build_filter1d(radius)
+        # Apply filter horizontally
+        blurred_image = correlate1d(image, weights, axis=h_axis, output=None, mode="reflect", cval=0.0, origin=0)
+        # Apply filter vertically
+        blurred_image = correlate1d(blurred_image, weights, axis=v_axis, output=None, mode="reflect", cval=0.0,
+                                    origin=0)
+        return blurred_image
+
+    @staticmethod
+    def resize(image_array, new_h=None, new_w=None, mode="L"):
+        if mode == "L":
+            image_array = np.expand_dims(image_array, axis=-1)
+        h, w, c = image_array.shape
+        if new_h == h and new_w == w:
+            return image_array
+        h_bounds = 0, h - 1
+        w_bounds = 0, w - 1
+        y = np.expand_dims(np.linspace(h_bounds[0], h_bounds[1], new_h), axis=-1)
+        x = np.expand_dims(np.linspace(w_bounds[0], w_bounds[1], new_w), axis=0)
+        # Calculate the floor and ceiling values of x and y
+        x_floor = np.floor(x).astype(int)
+        x_ceil = np.ceil(x).astype(int)
+        y_floor = np.floor(y).astype(int)
+        y_ceil = np.ceil(y).astype(int)
+        # Clip the values to stay within the image bounds
+        x_floor = np.clip(x_floor, w_bounds[0], w_bounds[1])
+        x_ceil = np.clip(x_ceil, w_bounds[0], w_bounds[1])
+        y_floor = np.clip(y_floor, h_bounds[0], h_bounds[1])
+        y_ceil = np.clip(y_ceil, h_bounds[0], h_bounds[1])
+        # Calculate the fractional part of x and y
+        dx = x - x_floor
+        dy = y - y_floor
+        # Get the values of the four neighboring pixels
+        dx = np.expand_dims(dx, axis=-1)
+        dy = np.expand_dims(dy, axis=-1)
+        q11 = image_array[y_floor, x_floor, :]
+        q21 = image_array[y_floor, x_ceil, :]
+        q12 = image_array[y_ceil, x_floor, :]
+        q22 = image_array[y_ceil, x_ceil, :]
+        # Perform bilinear interpolation
+        top_interp = q11 * (1.0 - dx) + q21 * dx
+        bottom_interp = q12 * (1.0 - dx) + q22 * dx
+        interpolated = top_interp * (1.0 - dy) + bottom_interp * dy
+        if mode == "L":
+            interpolated = np.squeeze(interpolated, axis=-1)
+        return interpolated
+
+    def preprocessed_image(self, x):
+        if type(x) is str:
+            image_array = Image.open(x).convert("RGB")
+            image_array = image_array.resize((self.img_width, self.img_height))
+        elif type(x) is np.ndarray:
+            image_array = self.resize(x, self.img_height, self.img_width, mode="RGB")
+        else:
+            return None, None
+        x = np.array(image_array, dtype=np.float32) / 255.0
+        input_image_array = x[None, ..., :3]
+        input_image_tensor = input_image_array * 2.0 - 1.0
+        return input_image_array, input_image_tensor
+
+    def preprocessed_mask(self, x, blur_radius=5):
+        if type(x) is str:
+            mask_array = Image.open(x).convert("L")
+            mask_array = mask_array.resize((self.img_width, self.img_height))
+        elif type(x) is np.ndarray:
+            mask_array = self.resize(x, self.img_height, self.img_width, mode="L")
+        else:
+            return None, None
+        input_mask_array = np.array(mask_array, dtype=np.float32) / 255.0
+        input_mask_array = self.gaussian_blur(input_mask_array, radius=blur_radius, h_axis=0, v_axis=1)
+        latent_mask_tensor = self.resize(input_mask_array, self.img_width // 8, self.img_height // 8,
+                                         mode="L")
+        return input_mask_array[None, ..., None], latent_mask_tensor[None, ..., None]
+
     def generate_image(
             self,
             encoded_text,
@@ -157,6 +307,10 @@ class StableDiffusionBase:
             seed=None,
             negative_embedding=None,
             control_net_image=None,
+            inpaint_mask=None,
+            mask_blur_strength=5,
+            reference_image=None,
+            reference_image_strength=0.8,
     ):
         """Generates an image based on encoded text.
 
@@ -209,7 +363,7 @@ class StableDiffusionBase:
 
         context = self._expand_tensor(encoded_text, batch_size)
         if negative_prompt is None and negative_embedding is None:
-            unconditional_context = tf.repeat(
+            unconditional_context = np.repeat(
                 self._get_unconditional_context(), batch_size, axis=0)
         else:
             if negative_prompt is None:
@@ -218,31 +372,57 @@ class StableDiffusionBase:
             unconditional_context = self._expand_tensor(unconditional_context, batch_size)
 
         if diffusion_noise is not None:
-            diffusion_noise = tf.squeeze(diffusion_noise)
-            if diffusion_noise.shape.rank == 3:
-                diffusion_noise = tf.repeat(tf.expand_dims(diffusion_noise, axis=0), batch_size, axis=0)
-            latent = diffusion_noise
-        else:
-            latent = self._get_initial_diffusion_noise(batch_size, seed)
-
+            diffusion_noise = np.squeeze(diffusion_noise)
+            if len(diffusion_noise.shape) == 3:
+                diffusion_noise = np.repeat(np.expand_dims(diffusion_noise, axis=0), batch_size, axis=0)
         # Iterative reverse diffusion stage
-        timesteps = tf.range(1, 1000, 1000 // num_steps)
-        alphas, alphas_prev = self._get_initial_alphas(timesteps)
+        timesteps = np.linspace(0, 1000 - 1, num_steps, dtype=np.int32)
+        init_time = None
+        init_latent = None
+        input_image_array = None
+        input_mask_array = None
+        latent_mask_tensor = None
+        if inpaint_mask is not None:
+            input_mask_array, latent_mask_tensor = self.preprocessed_mask(inpaint_mask, mask_blur_strength)
+            if input_mask_array is None or latent_mask_tensor is None:
+                print("wrong inpaint mask:{}".format(inpaint_mask))
+        if reference_image is not None and (0. < reference_image_strength < 1.):
+            input_image_array, input_image_tensor = self.preprocessed_image(reference_image)
+            if input_image_tensor is not None:
+                num_steps = int(num_steps * reference_image_strength + 0.5)
+                init_time = timesteps[num_steps]
+                init_latent = self.image_encoder.predict_on_batch(input_image_tensor)
+                timesteps = timesteps[:num_steps]
+            else:
+                print("wrong reference image:{}".format(reference_image))
+        latent = self._get_initial_diffusion_latent(batch_size=batch_size,
+                                                    init_latent=init_latent,
+                                                    init_time=init_time,
+                                                    seed=seed,
+                                                    noise=diffusion_noise)
+        signal_rates, noise_rates, next_signal_rates, next_noise_rates = self._get_initial_alphas(timesteps)
         progbar = tf.keras.utils.Progbar(len(timesteps))
         iteration = 0
+        hint_img = None
         if control_net_image is not None:
-            if isinstance(control_net_image, str):
-                controlnet_image = np.expand_dims(np.asarray(
-                    Image.open(control_net_image).convert("RGB").resize(size=(self.img_height, self.img_width)),
-                    dtype=np.float32) / 255.0, axis=0)
+            if type(control_net_image) is str:
+                image_array = Image.open(control_net_image).convert("RGB")
+                image_array = image_array.resize((self.img_width, self.img_height))
+            elif type(control_net_image) is np.ndarray:
+                image_array = self.resize(control_net_image, self.img_height, self.img_width, mode="RGB")
             else:
-                controlnet_image = control_net_image
-            controlnet_image = np.tile(controlnet_image, (batch_size, 1, 1, 1))
-            hint_img = self.hint_net.predict_on_batch(controlnet_image)
+                print("wrong controlnet image:{}".format(control_net_image))
+                image_array = None
+            if image_array is not None:
+                controlnet_image = np.expand_dims(np.array(image_array, dtype=np.float32) / 255.0, axis=0)
+                controlnet_image = np.tile(controlnet_image, (batch_size, 1, 1, 1))
+                hint_img = self.hint_net.predict_on_batch(controlnet_image)
+            else:
+                control_net_image = None
         for index, timestep in list(enumerate(timesteps))[::-1]:
             latent_prev = latent  # Set aside the previous latent vector
             t_emb = self._get_timestep_embedding(timestep, batch_size)
-            if control_net_image is not None:
+            if control_net_image is not None and hint_img is not None:
                 unconditional_controls = self.control_net.predict_on_batch(
                     [latent, t_emb, unconditional_context, hint_img])
                 unconditional_latent = self.diffusion_model.predict_on_batch(
@@ -256,20 +436,28 @@ class StableDiffusionBase:
                     [latent, t_emb, context])
             latent = unconditional_latent + unconditional_guidance_scale * (
                     latent - unconditional_latent)
-            a_t, a_prev = alphas[index], alphas_prev[index]
-            pred_x0 = (latent_prev - math.sqrt(1 - a_t) * latent) / math.sqrt(a_t)
-            latent = (latent * math.sqrt(1.0 - a_prev) + math.sqrt(a_prev) * pred_x0)
+            pred_x0 = (latent_prev - noise_rates[index] * latent) / signal_rates[index]
+            latent = (latent * next_noise_rates[index] + next_signal_rates[index] * pred_x0)
+            if latent_mask_tensor is not None and init_latent is not None:
+                latent_orgin = self._get_initial_diffusion_latent(batch_size=batch_size,
+                                                                  init_latent=init_latent,
+                                                                  init_time=timestep,
+                                                                  seed=seed,
+                                                                  noise=diffusion_noise)
+                latent = latent_orgin * (1. - latent_mask_tensor) + latent * latent_mask_tensor
             iteration += 1
             progbar.update(iteration)
 
         # Decoding stage
         decoded = self.image_decoder.predict_on_batch(latent)
-        decoded = ((decoded + 1) / 2) * 255
-        return np.clip(decoded, 0, 255).astype("uint8")
+        decoded = np.array(((decoded + 1.) * 0.5), dtype=np.float32)
+        if input_mask_array is not None and input_image_array is not None:
+            decoded = input_image_array * (1. - input_mask_array) + decoded * input_mask_array
+        return np.clip(decoded * 255., 0, 255).astype("uint8")
 
     def _get_unconditional_context(self):
         unconditional_tokens_ids = [49406] + [49407] * (MAX_PROMPT_LENGTH - 1)
-        unconditional_tokens = tf.convert_to_tensor([unconditional_tokens_ids], dtype=tf.int32)
+        unconditional_tokens = np.asarray([unconditional_tokens_ids], dtype=np.int32)
         clip_embedding = self.text_clip_embedding.predict_on_batch([unconditional_tokens, self._get_pos_ids()])
         unconditional_context = self.text_encoder.predict_on_batch(clip_embedding)
         return unconditional_context
@@ -277,10 +465,10 @@ class StableDiffusionBase:
     def _expand_tensor(self, text_embedding, batch_size):
         """Extends a tensor by repeating it to fit the shape of the given batch
         size."""
-        text_embedding = tf.squeeze(text_embedding)
-        if text_embedding.shape.rank == 2:
-            text_embedding = tf.repeat(
-                tf.expand_dims(text_embedding, axis=0), batch_size, axis=0
+        text_embedding = np.squeeze(text_embedding)
+        if len(text_embedding.shape) == 2:
+            text_embedding = np.repeat(
+                np.expand_dims(text_embedding, axis=0), batch_size, axis=0
             )
         return text_embedding
 
@@ -347,18 +535,20 @@ class StableDiffusionBase:
             self, timestep, batch_size, dim=320, max_period=10000
     ):
         half = dim // 2
-        freqs = tf.math.exp(
-            -math.log(max_period) * tf.range(0, half, dtype=tf.float32) / half
+        freqs = np.exp(
+            -np.log(max_period) * np.asarray(range(0, half), dtype=np.float32) / half
         )
-        args = tf.convert_to_tensor([timestep], dtype=tf.float32) * freqs
-        embedding = tf.concat([tf.math.cos(args), tf.math.sin(args)], 0)
-        embedding = tf.reshape(embedding, [1, -1])
-        return tf.repeat(embedding, batch_size, axis=0)
+        args = np.asarray([timestep], dtype=np.float32) * freqs
+        embedding = np.concatenate([np.cos(args), np.sin(args)], axis=0)
+        embedding = np.reshape(embedding, [1, -1])
+        return np.repeat(embedding, batch_size, axis=0)
 
     def _get_initial_alphas(self, timesteps):
-        alphas = [self.alphas_cumprod[t] for t in timesteps]
-        alphas_prev = [1.0] + alphas[:-1]
-        return alphas, alphas_prev
+        signal_rates = [self.signal_rates[t] for t in timesteps]
+        noise_rates = [self.noise_rates[t] for t in timesteps]
+        next_signal_rates = [1.0] + signal_rates[:-1]
+        next_noise_rates = [0.0] + noise_rates[:-1]
+        return signal_rates, noise_rates, next_signal_rates, next_noise_rates
 
     def _get_initial_diffusion_noise(self, batch_size, seed):
         if seed is not None:
@@ -371,11 +561,20 @@ class StableDiffusionBase:
                 (batch_size, self.img_height // 8, self.img_width // 8, 4)
             )
 
+    def _get_initial_diffusion_latent(self, batch_size, init_latent=None, init_time=None, seed=None,
+                                      noise=None):
+        if noise is None:
+            noise = self._get_initial_diffusion_noise(batch_size, seed=seed)
+        if init_latent is None:
+            latent = noise
+        else:
+            latent = self.signal_rates[init_time] * np.repeat(init_latent, batch_size, axis=0) + self.noise_rates[
+                init_time] * noise
+        return latent
+
     @staticmethod
     def _get_pos_ids():
-        return tf.convert_to_tensor(
-            [list(range(MAX_PROMPT_LENGTH))], dtype=tf.int32
-        )
+        return np.asarray([list(range(MAX_PROMPT_LENGTH))], dtype=np.int32)
 
 
 class StableDiffusion(StableDiffusionBase):
