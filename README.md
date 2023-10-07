@@ -135,6 +135,7 @@ Image.fromarray(img[0]).save("out.jpg")
     - [ ] Face Restoration
     - [ ] Sampler
     - [ ] Flash Attention
+    - [ ] Multi-language Prompt
     - [ ] Gui
 
 Distributed under the MIT License. See `LICENSE` for more information.
