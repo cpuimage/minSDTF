@@ -15,7 +15,7 @@ import os
 
 import tensorflow as tf
 
-from .layers import AttentionBlock, PaddedConv2D, ResnetBlock
+from .layers import GroupNormalization, AttentionBlock, PaddedConv2D, ResnetBlock
 from .ckpt_loader import load_weights_from_file, CKPT_MAPPING
 
 
@@ -48,7 +48,7 @@ class ImageDecoder(tf.keras.Sequential):
                 ResnetBlock(128),
                 ResnetBlock(128),
                 ResnetBlock(128),
-                tf.keras.layers.GroupNormalization(epsilon=1e-5),
+                GroupNormalization(epsilon=1e-5),
                 tf.keras.layers.Activation("swish"),
                 PaddedConv2D(3, 3, padding=1),
             ],

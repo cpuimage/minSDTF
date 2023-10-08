@@ -2209,11 +2209,11 @@ def load_weights_from_lora(ckpt_path):
             lora_down = state_dict[name + ".lora_down.weight"]
             lora_up = state_dict[name + ".lora_up.weight"]
             if isinstance(lora_down, torch.Tensor):
-                lora_down = lora_down.detach().numpy()
+                lora_down = lora_down.detach().to(torch.float).cpu().numpy()
             if isinstance(lora_up, torch.Tensor):
-                lora_up = lora_up.detach().numpy()
+                lora_up = lora_up.detach().to(torch.float).cpu().numpy()
             if isinstance(alpha, torch.Tensor):
-                alpha = alpha.detach().numpy()
+                alpha = alpha.detach().to(torch.float).cpu().numpy()
             rank = float(lora_up.shape[1])
             w = np.einsum("ab...,bc...->ac...", lora_up, lora_down) * (alpha / rank)
             str_key = str(key)
