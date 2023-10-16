@@ -26,33 +26,36 @@ If you installed the package, you can use it as follows:
 import cv2
 import numpy as np
 from PIL import Image
+
 from stable_diffusion.stable_diffusion import StableDiffusion
 
-# for load civitai model:
-civitai_model = "/path/to/civitai_model.safetensors"
-model = StableDiffusion(img_height=512, img_width=512, jit_compile=True, clip_skip=-2, civitai_model=civitai_model)
+# load ckpt from local path:
+model = StableDiffusion(img_height=512, img_width=512, jit_compile=True, clip_skip=-2,
+                        unet_ckpt="/path/to/unet.safetensors",
+                        vae_ckpt="/path/to/vae.safetensors",
+                        text_encoder_ckpt="/path/to/text_encoder.safetensors")
 img = model.text_to_image(
-    "a cute girl.",
-    num_steps=25,
-    seed=123456)
+  "a cute girl.",
+  num_steps=25,
+  seed=123456)
 Image.fromarray(img[0]).save("out.jpg")
 
 # for clip skip:
 model = StableDiffusion(img_height=512, img_width=512, jit_compile=True, clip_skip=-2)
 img = model.text_to_image(
-    "a cute girl.",
-    num_steps=25,
-    seed=123456)
+  "a cute girl.",
+  num_steps=25,
+  seed=123456)
 Image.fromarray(img[0]).save("out.jpg")
 
 # for textual inversion:
 model = StableDiffusion(img_height=512, img_width=512, jit_compile=True)
 img = model.text_to_image(
-    "a cute girl.",
-    num_steps=25,
-    seed=123456,
-    embedding="/path/to/embedding.pt",
-    negative_embedding="/path/to/negative_embedding.pt",
+  "a cute girl.",
+  num_steps=25,
+  seed=123456,
+  embedding="/path/to/embedding.pt",
+  negative_embedding="/path/to/negative_embedding.pt",
 )
 Image.fromarray(img[0]).save("out.jpg")
 
@@ -67,52 +70,52 @@ canny = np.expand_dims(canny, axis=-1)
 canny = np.concatenate([canny, canny, canny], axis=2)
 Image.fromarray(canny).save("canny.jpg")
 img = model.text_to_image(
-    "a cute girl.",
-    num_steps=25,
-    seed=123456,
-    control_net_image=np.expand_dims(canny, axis=0).astype(np.float32) / 255.0
+  "a cute girl.",
+  num_steps=25,
+  seed=123456,
+  control_net_image=np.expand_dims(canny, axis=0).astype(np.float32) / 255.0
 )
 Image.fromarray(img[0]).save("out.jpg")
 
 # for lora
 model = StableDiffusion(img_height=512, img_width=512, jit_compile=True, lora_path="/path/to/lora.safetensors")
 img = model.text_to_image(
-    "a cute girl.",
-    num_steps=25,
-    seed=123456,
+  "a cute girl.",
+  num_steps=25,
+  seed=123456,
 )
 Image.fromarray(img[0]).save("out.jpg")
 
 # for long prompt weighting
 model = StableDiffusion(img_height=512, img_width=512, jit_compile=True)
 img = model.text_to_image(
-    prompt="best_quality (1girl:1.3) bow bride brown_hair closed_mouth frilled_bow frilled_hair_tubes frills (full_body:1.3) fox_ear hair_bow hair_tubes happy hood japanese_clothes kimono long_sleeves red_bow smile solo tabi uchikake white_kimono wide_sleeves cherry_blossoms",
-    negative_prompt="lowres, bad_anatomy, error_body, error_hair, error_arm, error_hands, bad_hands, error_fingers, bad_fingers, missing_fingers, error_legs, bad_legs, multiple_legs, missing_legs, error_lighting, error_shadow, error_reflection, text, error, extra_digit, fewer_digits, cropped, worst_quality, low_quality, normal_quality, jpeg_artifacts, signature, watermark, username, blurry",
-    num_steps=25,
-    seed=123456,
+  prompt="best_quality (1girl:1.3) bow bride brown_hair closed_mouth frilled_bow frilled_hair_tubes frills (full_body:1.3) fox_ear hair_bow hair_tubes happy hood japanese_clothes kimono long_sleeves red_bow smile solo tabi uchikake white_kimono wide_sleeves cherry_blossoms",
+  negative_prompt="lowres, bad_anatomy, error_body, error_hair, error_arm, error_hands, bad_hands, error_fingers, bad_fingers, missing_fingers, error_legs, bad_legs, multiple_legs, missing_legs, error_lighting, error_shadow, error_reflection, text, error, extra_digit, fewer_digits, cropped, worst_quality, low_quality, normal_quality, jpeg_artifacts, signature, watermark, username, blurry",
+  num_steps=25,
+  seed=123456,
 )
 Image.fromarray(img[0]).save("out.jpg")
 
 # for Image To Image
 model = StableDiffusion(img_height=512, img_width=512, jit_compile=True)
 img = model.image_to_image(
-    "a cute girl.",
-    reference_image="/path/to/a_girl.jpg",
-    reference_image_strength=0.8,
-    num_steps=50,
+  "a cute girl.",
+  reference_image="/path/to/a_girl.jpg",
+  reference_image_strength=0.8,
+  num_steps=50,
 )
 Image.fromarray(img[0]).save("out.jpg")
 
 # for Inpaint
 model = StableDiffusion(img_height=512, img_width=512, jit_compile=True)
 img = model.inpaint(
-    "A dog with sunglasses, wearing comfy hat, looking at camera, highly detailed, ultra sharp, cinematic, 100mm lens, 8k resolution.",
-    reference_image="/path/to/dog.jpg",
-    inpaint_mask="/path/to/dog_mask.png",
-    mask_blur_strength=5,
-    unconditional_guidance_scale=8.0,
-    reference_image_strength=0.9,
-    num_steps=50,
+  "A dog with sunglasses, wearing comfy hat, looking at camera, highly detailed, ultra sharp, cinematic, 100mm lens, 8k resolution.",
+  reference_image="/path/to/dog.jpg",
+  inpaint_mask="/path/to/dog_mask.png",
+  mask_blur_strength=5,
+  unconditional_guidance_scale=8.0,
+  reference_image_strength=0.9,
+  num_steps=50,
 )
 Image.fromarray(img[0]).save("out.jpg")
 ```
