@@ -6,3 +6,4 @@ safetensors
 numpy
 opencv-python
 scipy
+gradio

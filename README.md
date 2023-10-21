@@ -10,6 +10,10 @@ was not only easy to learn but also easy to maintain and develop. so, I did this
 that is compatible with the resources of the active PyTorch community, but at the same time will have the multiple
 features of Keras/TensorFlow.
 
+<div style="width: 100%; text-align: center; margin:auto;">
+<img style="width:100%" src="./gui.jpg"><
+</div> 
+
 #### Using pip without a virtual environment
 
 Install dependencies using the `requirements.txt` file:
@@ -140,6 +144,7 @@ Image.fromarray(img[0]).save("out.jpg")
     - [ ] Flash Attention
     - [ ] Multi-language Prompt
     - [ ] Gui
+    - [ ] Cache Manager
 
 Distributed under the MIT License. See `LICENSE` for more information.
 

@@ -23,8 +23,9 @@ Credits:
 The current implementation is a rewrite of the initial TF/Keras port by
 Divam Gupta.
 """
-import numpy as np
 import os
+
+import numpy as np
 import tensorflow as tf
 import torch
 from PIL import Image
@@ -230,9 +231,7 @@ class StableDiffusionBase:
         return blurred_image
 
     @staticmethod
-    def resize(image_array, new_h=None, new_w=None, mode="L"):
-        if mode == "L":
-            image_array = np.expand_dims(image_array, axis=-1)
+    def resize(image_array, new_h=None, new_w=None):
         h, w, c = image_array.shape
         if new_h == h and new_w == w:
             return image_array
@@ -264,36 +263,29 @@ class StableDiffusionBase:
         top_interp = q11 * (1.0 - dx) + q21 * dx
         bottom_interp = q12 * (1.0 - dx) + q22 * dx
         interpolated = top_interp * (1.0 - dy) + bottom_interp * dy
-        if mode == "L":
-            interpolated = np.squeeze(interpolated, axis=-1)
         return interpolated
 
     def preprocessed_image(self, x):
         if type(x) is str:
-            image_array = Image.open(x).convert("RGB")
-            image_array = image_array.resize((self.img_width, self.img_height))
-        elif type(x) is np.ndarray:
-            image_array = self.resize(x, self.img_height, self.img_width, mode="RGB")
-        else:
-            return None, None
-        x = np.array(image_array, dtype=np.float32) / 255.0
-        input_image_array = x[None, ..., :3]
+            x = np.array(Image.open(x).convert("RGB"))
+        image_array = self.resize(x, self.img_height, self.img_width)
+        image_array = np.array(image_array, dtype=np.float32) / 255.0
+        input_image_array = image_array[None, ..., :3]
         input_image_tensor = input_image_array * 2.0 - 1.0
         return input_image_array, input_image_tensor
 
     def preprocessed_mask(self, x, blur_radius=5):
         if type(x) is str:
-            mask_array = Image.open(x).convert("L")
-            mask_array = mask_array.resize((self.img_width, self.img_height))
-        elif type(x) is np.ndarray:
-            mask_array = self.resize(x, self.img_height, self.img_width, mode="L")
-        else:
-            return None, None
+            x = np.array(Image.open(x).convert("L"))
+        if len(x.shape) == 2:
+            x = np.expand_dims(x, axis=-1)
+        mask_array = self.resize(x, self.img_height, self.img_width)
+        if mask_array.shape[-1] != 1:
+            mask_array = np.mean(mask_array, axis=-1, keepdims=True)
         input_mask_array = np.array(mask_array, dtype=np.float32) / 255.0
         input_mask_array = self.gaussian_blur(input_mask_array, radius=blur_radius, h_axis=0, v_axis=1)
-        latent_mask_tensor = self.resize(input_mask_array, self.img_width // 8, self.img_height // 8,
-                                         mode="L")
-        return input_mask_array[None, ..., None], latent_mask_tensor[None, ..., None]
+        latent_mask_tensor = self.resize(input_mask_array, self.img_width // 8, self.img_height // 8)
+        return np.expand_dims(input_mask_array, axis=0), np.expand_dims(latent_mask_tensor, axis=0)
 
     def generate_image(
             self,
@@ -408,7 +400,7 @@ class StableDiffusionBase:
                 image_array = Image.open(control_net_image).convert("RGB")
                 image_array = image_array.resize((self.img_width, self.img_height))
             elif type(control_net_image) is np.ndarray:
-                image_array = self.resize(control_net_image, self.img_height, self.img_width, mode="RGB")
+                image_array = self.resize(control_net_image, self.img_height, self.img_width)
             else:
                 print("wrong controlnet image:{}".format(control_net_image))
                 image_array = None

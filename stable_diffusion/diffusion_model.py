@@ -68,12 +68,13 @@ class Attentions(tf.keras.layers.Layer):
 
     def call(self, inputs):
         inputs, context = inputs
-        _, h, w, c = inputs.shape
+        batch_size = tf.shape(inputs)[0]
+        h, w, c = inputs.get_shape().as_list()[1:]
         x = self.norm(inputs)
         x = self.proj_in(x)
-        x = tf.reshape(x, (-1, h * w, c))
+        x = tf.reshape(x, (batch_size, h * w, c))
         x = self.transformer_block([x, context])
-        x = tf.reshape(x, (-1, h, w, c))
+        x = tf.reshape(x, (batch_size, h, w, c))
         return self.proj_out(x) + inputs
 
 
