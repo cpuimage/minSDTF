@@ -7,3 +7,5 @@ numpy
 opencv-python
 scipy
 gradio
+streamlit
+streamlit_drawable_canvas

@@ -21,6 +21,11 @@ Install dependencies using the `requirements.txt` file:
 ```bash
 pip install -r requirements.txt
 ```
+#### Run
+
+```
+streamlit run app.py
+```
 
 ### Using the Python interface
 
@@ -158,6 +163,7 @@ Licenses for borrowed code can be found in following link:
 - KerasCV - https://github.com/keras-team/keras-cv
 - Diffusers - https://github.com/huggingface/diffusers
 - Stable Diffusion Web UI - https://github.com/AUTOMATIC1111/stable-diffusion-webui
+- Stable Diffusion 2 XL Streamlit https://github.com/dlebech/stable-diffusion-2-xl-streamlit/
 
 ## Models
 

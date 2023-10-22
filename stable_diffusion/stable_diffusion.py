@@ -51,9 +51,6 @@ class StableDiffusionBase:
             img_height=512,
             img_width=512,
             jit_compile=False):
-        # UNet requires multiples of 2**7 = 128
-        img_height = round(img_height / 128) * 128
-        img_width = round(img_width / 128) * 128
         self.img_height = img_height
         self.img_width = img_width
 
@@ -94,7 +91,8 @@ class StableDiffusionBase:
             embedding=None,
             negative_embedding=None,
             seed=None,
-            control_net_image=None):
+            control_net_image=None,
+            callback=None):
         encoded_text = self.encode_text(prompt, embedding)
 
         return self.generate_image(
@@ -105,7 +103,7 @@ class StableDiffusionBase:
             unconditional_guidance_scale=unconditional_guidance_scale,
             seed=seed,
             negative_embedding=negative_embedding,
-            control_net_image=control_net_image)
+            control_net_image=control_net_image, callback=callback)
 
     def image_to_image(
             self,
@@ -119,7 +117,8 @@ class StableDiffusionBase:
             seed=None,
             control_net_image=None,
             reference_image=None,
-            reference_image_strength=0.8):
+            reference_image_strength=0.8,
+            callback=None):
         encoded_text = self.encode_text(prompt, embedding)
         return self.generate_image(
             encoded_text,
@@ -131,7 +130,7 @@ class StableDiffusionBase:
             negative_embedding=negative_embedding,
             control_net_image=control_net_image,
             reference_image=reference_image,
-            reference_image_strength=reference_image_strength)
+            reference_image_strength=reference_image_strength, callback=callback)
 
     def inpaint(
             self,
@@ -147,7 +146,8 @@ class StableDiffusionBase:
             reference_image=None,
             reference_image_strength=0.8,
             inpaint_mask=None,
-            mask_blur_strength=5):
+            mask_blur_strength=None,
+            callback=None):
         encoded_text = self.encode_text(prompt, embedding)
 
         return self.generate_image(
@@ -162,7 +162,7 @@ class StableDiffusionBase:
             reference_image=reference_image,
             reference_image_strength=reference_image_strength,
             inpaint_mask=inpaint_mask,
-            mask_blur_strength=mask_blur_strength)
+            mask_blur_strength=mask_blur_strength, callback=callback)
 
     def encode_text(self, prompt, embedding_data=None):
         """Encodes a prompt into a latent text encoding.
@@ -268,6 +268,8 @@ class StableDiffusionBase:
     def preprocessed_image(self, x):
         if type(x) is str:
             x = np.array(Image.open(x).convert("RGB"))
+        else:
+            x = np.array(x)
         image_array = self.resize(x, self.img_height, self.img_width)
         image_array = np.array(image_array, dtype=np.float32) / 255.0
         input_image_array = image_array[None, ..., :3]
@@ -277,13 +279,16 @@ class StableDiffusionBase:
     def preprocessed_mask(self, x, blur_radius=5):
         if type(x) is str:
             x = np.array(Image.open(x).convert("L"))
+        else:
+            x = np.array(x)
         if len(x.shape) == 2:
             x = np.expand_dims(x, axis=-1)
         mask_array = self.resize(x, self.img_height, self.img_width)
         if mask_array.shape[-1] != 1:
             mask_array = np.mean(mask_array, axis=-1, keepdims=True)
         input_mask_array = np.array(mask_array, dtype=np.float32) / 255.0
-        input_mask_array = self.gaussian_blur(input_mask_array, radius=blur_radius, h_axis=0, v_axis=1)
+        if blur_radius is not None:
+            input_mask_array = self.gaussian_blur(input_mask_array, radius=blur_radius, h_axis=0, v_axis=1)
         latent_mask_tensor = self.resize(input_mask_array, self.img_width // 8, self.img_height // 8)
         return np.expand_dims(input_mask_array, axis=0), np.expand_dims(latent_mask_tensor, axis=0)
 
@@ -299,9 +304,9 @@ class StableDiffusionBase:
             negative_embedding=None,
             control_net_image=None,
             inpaint_mask=None,
-            mask_blur_strength=5,
+            mask_blur_strength=None,
             reference_image=None,
-            reference_image_strength=0.8,
+            reference_image_strength=0.8, callback=None
     ):
         """Generates an image based on encoded text.
 
@@ -437,6 +442,8 @@ class StableDiffusionBase:
                                                                   noise=diffusion_noise)
                 latent = latent_orgin * (1. - latent_mask_tensor) + latent * latent_mask_tensor
             iteration += 1
+            if callback is not None:
+                callback(iteration)
             progbar.update(iteration)
 
         # Decoding stage
@@ -522,6 +529,10 @@ class StableDiffusionBase:
 
     def _get_initial_diffusion_noise(self, batch_size, seed):
         if seed is not None:
+            try:
+                seed = int(seed)
+            except:
+                seed = None
             return tf.random.stateless_normal(
                 (batch_size, self.img_height // 8, self.img_width // 8, 4),
                 seed=[seed, seed],
@@ -693,7 +704,7 @@ class StableDiffusion(StableDiffusionBase):
         modified.
         """
         if self._image_decoder is None:
-            self._image_decoder = ImageDecoder(self.img_height, self.img_width, ckpt_path=self.vae_ckpt)
+            self._image_decoder = ImageDecoder(ckpt_path=self.vae_ckpt)
             if self.jit_compile:
                 self._image_decoder.compile(jit_compile=True)
         return self._image_decoder

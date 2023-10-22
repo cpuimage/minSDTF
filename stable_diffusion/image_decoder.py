@@ -20,10 +20,10 @@ from .ckpt_loader import load_weights_from_file, CKPT_MAPPING
 
 
 class ImageDecoder(tf.keras.Sequential):
-    def __init__(self, img_height, img_width, name=None, ckpt_path=None):
+    def __init__(self, name=None, ckpt_path=None):
         super().__init__(
             [
-                tf.keras.layers.Input((img_height // 8, img_width // 8, 4)),
+                tf.keras.layers.Input((None, None, 4)),
                 tf.keras.layers.Rescaling(1.0 / 0.18215),
                 PaddedConv2D(4, 1),
                 PaddedConv2D(512, 3, padding=1),
