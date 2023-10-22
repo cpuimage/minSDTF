@@ -11,7 +11,7 @@ that is compatible with the resources of the active PyTorch community, but at th
 features of Keras/TensorFlow.
 
 <div style="width: 100%; text-align: center; margin:auto;">
-<img style="width:100%" src="./gui.jpg"><
+<img style="width:100%" src="./gui.jpg">
 </div> 
 
 #### Using pip without a virtual environment
