@@ -92,6 +92,7 @@ class StableDiffusionBase:
             negative_embedding=None,
             seed=None,
             control_net_image=None,
+            guidance_rescale=0.7,
             callback=None):
         encoded_text = self.encode_text(prompt, embedding)
 
@@ -103,7 +104,9 @@ class StableDiffusionBase:
             unconditional_guidance_scale=unconditional_guidance_scale,
             seed=seed,
             negative_embedding=negative_embedding,
-            control_net_image=control_net_image, callback=callback)
+            control_net_image=control_net_image,
+            guidance_rescale=guidance_rescale,
+            callback=callback)
 
     def image_to_image(
             self,
@@ -118,6 +121,7 @@ class StableDiffusionBase:
             control_net_image=None,
             reference_image=None,
             reference_image_strength=0.8,
+            guidance_rescale=0.7,
             callback=None):
         encoded_text = self.encode_text(prompt, embedding)
         return self.generate_image(
@@ -130,7 +134,9 @@ class StableDiffusionBase:
             negative_embedding=negative_embedding,
             control_net_image=control_net_image,
             reference_image=reference_image,
-            reference_image_strength=reference_image_strength, callback=callback)
+            reference_image_strength=reference_image_strength,
+            guidance_rescale=guidance_rescale,
+            callback=callback)
 
     def inpaint(
             self,
@@ -147,6 +153,7 @@ class StableDiffusionBase:
             reference_image_strength=0.8,
             inpaint_mask=None,
             mask_blur_strength=None,
+            guidance_rescale=0.7,
             callback=None):
         encoded_text = self.encode_text(prompt, embedding)
 
@@ -162,7 +169,9 @@ class StableDiffusionBase:
             reference_image=reference_image,
             reference_image_strength=reference_image_strength,
             inpaint_mask=inpaint_mask,
-            mask_blur_strength=mask_blur_strength, callback=callback)
+            mask_blur_strength=mask_blur_strength,
+            guidance_rescale=guidance_rescale,
+            callback=callback)
 
     def encode_text(self, prompt, embedding_data=None):
         """Encodes a prompt into a latent text encoding.
@@ -292,6 +301,19 @@ class StableDiffusionBase:
         latent_mask_tensor = self.resize(input_mask_array, self.img_width // 8, self.img_height // 8)
         return np.expand_dims(input_mask_array, axis=0), np.expand_dims(latent_mask_tensor, axis=0)
 
+    def rescale_noise_cfg(self, noise_cfg, noise_pred_text, guidance_rescale=0.0, epsilon=1e-05):
+        """
+        Rescale `noise_cfg` according to `guidance_rescale`. Based on findings of [Common Diffusion Noise Schedules and
+        Sample Steps are Flawed](https://arxiv.org/abs/2305.08891). See Section 3.4
+        """
+        std_text = np.std(noise_pred_text, axis=tuple(range(1, len(noise_pred_text.shape))), keepdims=True)
+        std_cfg = np.std(noise_cfg, axis=tuple(range(1, len(noise_cfg.shape))), keepdims=True) + epsilon
+        # rescale the results from guidance (fixes overexposure)
+        noise_pred_rescaled = noise_cfg * (std_text / std_cfg)
+        # mix with the original results from guidance by factor guidance_rescale to avoid "plain looking" images
+        noise_cfg = guidance_rescale * noise_pred_rescaled + (1.0 - guidance_rescale) * noise_cfg
+        return noise_cfg
+
     def generate_image(
             self,
             encoded_text,
@@ -306,7 +328,9 @@ class StableDiffusionBase:
             inpaint_mask=None,
             mask_blur_strength=None,
             reference_image=None,
-            reference_image_strength=0.8, callback=None
+            reference_image_strength=0.8,
+            guidance_rescale=0.0,
+            callback=None
     ):
         """Generates an image based on encoded text.
 
@@ -424,14 +448,16 @@ class StableDiffusionBase:
                 unconditional_latent = self.diffusion_model.predict_on_batch(
                     [latent, t_emb, unconditional_context] + list(unconditional_controls))
                 controls = self.control_net.predict_on_batch([latent, t_emb, context, hint_img])
-                latent = self.diffusion_model.predict_on_batch([latent, t_emb, context] + list(controls))
+                latent_text = self.diffusion_model.predict_on_batch([latent, t_emb, context] + list(controls))
             else:
                 unconditional_latent = self.diffusion_model.predict_on_batch(
                     [latent, t_emb, unconditional_context])
-                latent = self.diffusion_model.predict_on_batch(
+                latent_text = self.diffusion_model.predict_on_batch(
                     [latent, t_emb, context])
-            latent = unconditional_latent + unconditional_guidance_scale * (
-                    latent - unconditional_latent)
+            latent = unconditional_latent + unconditional_guidance_scale * (latent_text - unconditional_latent)
+            if guidance_rescale > 0.0:
+                # Based on 3.4. in https://arxiv.org/abs/2305.08891
+                latent = self.rescale_noise_cfg(latent, latent_text, guidance_rescale=guidance_rescale)
             pred_x0 = (latent_prev - noise_rates[index] * latent) / signal_rates[index]
             latent = (latent * next_noise_rates[index] + next_signal_rates[index] * pred_x0)
             if latent_mask_tensor is not None and init_latent is not None:

@@ -47,6 +47,7 @@ def generate(
         width=DEFAULT_WIDTH,
         height=DEFAULT_HEIGHT,
         guidance_scale=7.5,
+        guidance_rescale=0.7,
         strength=1.0,
         seed=-1,
 ):
@@ -62,6 +63,7 @@ def generate(
         callback=callback,
         seed=None if seed == -1 else seed,
         unconditional_guidance_scale=guidance_scale,
+        guidance_rescale=guidance_rescale,
     )
     print("kwargs", kwargs)
     if pipeline_name == "inpaint" and _image_input and _mask_input:
@@ -131,6 +133,14 @@ def prompt_and_generate_button(prefix, pipeline_name: PIPELINE_NAMES, **kwargs):
             key=f"{prefix}-guidance-scale",
         )
     with col3:
+        guidance_rescale = st.slider(
+            "Guidance rescale",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.7,
+            step=0.1,
+            key=f"{prefix}-guidance-rescale",
+        )
         seed = st.text_input(
             "seed",
             value=-1,
@@ -143,6 +153,7 @@ def prompt_and_generate_button(prefix, pipeline_name: PIPELINE_NAMES, **kwargs):
                 pipeline_name,
                 negative_prompt=negative_prompt,
                 steps=steps,
+                guidance_rescale=guidance_rescale,
                 guidance_scale=guidance_scale,
                 seed=seed,
                 **kwargs,
