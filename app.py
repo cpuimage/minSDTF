@@ -119,8 +119,8 @@ def prompt_and_generate_button(prefix, pipeline_name: PIPELINE_NAMES, **kwargs):
         steps = st.slider(
             "Number of inference steps",
             min_value=1,
-            max_value=200,
-            value=20,
+            max_value=50,
+            value=4,
             key=f"{prefix}-inference-steps",
         )
     with col2:
@@ -128,7 +128,7 @@ def prompt_and_generate_button(prefix, pipeline_name: PIPELINE_NAMES, **kwargs):
             "Guidance scale",
             min_value=0.0,
             max_value=20.0,
-            value=7.5,
+            value=0.0,
             step=0.5,
             key=f"{prefix}-guidance-scale",
         )
@@ -137,7 +137,7 @@ def prompt_and_generate_button(prefix, pipeline_name: PIPELINE_NAMES, **kwargs):
             "Guidance rescale",
             min_value=0.0,
             max_value=1.0,
-            value=0.7,
+            value=0.0,
             step=0.1,
             key=f"{prefix}-guidance-rescale",
         )
@@ -155,7 +155,7 @@ def prompt_and_generate_button(prefix, pipeline_name: PIPELINE_NAMES, **kwargs):
                 steps=steps,
                 guidance_rescale=guidance_rescale,
                 guidance_scale=guidance_scale,
-                seed=seed,
+                seed=seed if seed != -1 else np.random.randint(0, 1 << 31),
                 **kwargs,
             )
             set_image(OUTPUT_IMAGE_KEY, image.copy())
