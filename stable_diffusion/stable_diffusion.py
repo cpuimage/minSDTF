@@ -442,7 +442,7 @@ class StableDiffusionBase:
         for index, timestep in list(enumerate(timesteps))[::-1]:
             latent_prev = latent  # Set aside the previous latent vector
             t_emb = self._get_timestep_embedding(timestep, batch_size)
-            if not self.active_lcm:
+            if unconditional_guidance_scale > 0.0:
                 if control_net_image is not None and hint_img is not None:
                     unconditional_controls = self.control_net.predict_on_batch(
                         [latent, t_emb, unconditional_context, hint_img])
