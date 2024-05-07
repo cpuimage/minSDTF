@@ -638,8 +638,9 @@ class StableDiffusion(StableDiffusionBase):
             text_encoder_ckpt=None,
             vae_ckpt=None,
             lora_path=None,
-            controlnet_path=None):
-        super().__init__(img_height, img_width, jit_compile)
+            controlnet_path=None,
+            active_lcm=False):
+        super().__init__(img_height, img_width, jit_compile, active_lcm)
         self.clip_skip = clip_skip
         self.unet_ckpt = unet_ckpt
         self.text_encoder_ckpt = text_encoder_ckpt
