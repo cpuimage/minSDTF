@@ -291,7 +291,7 @@ class DiffusionModel(tf.keras.Model):
                 return
             else:
                 origin = ckpt_path
-        model_weights_fpath = tf.keras.utils.get_file(origin=origin)
+        model_weights_fpath = tf.keras.utils.get_file(origin=origin, fname="dreamlike-photoreal-2.0.safetensors")
         if os.path.exists(model_weights_fpath):
             load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping, key_mapping=UNET_KEY_MAPPING,
                                    lora_dict=lora_dict)

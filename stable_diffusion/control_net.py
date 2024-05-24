@@ -37,7 +37,7 @@ class HintNet(tf.keras.Sequential):
                 return
             else:
                 origin = controlnet_path
-        model_weights_fpath = tf.keras.utils.get_file(origin=origin)
+        model_weights_fpath = tf.keras.utils.get_file(origin=origin, fname="control_sd15_canny.pth")
         if os.path.exists(model_weights_fpath):
             load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping)
 
@@ -113,6 +113,6 @@ class ControlNet(tf.keras.Model):
                 return
             else:
                 origin = controlnet_path
-        model_weights_fpath = tf.keras.utils.get_file(origin=origin)
+        model_weights_fpath = tf.keras.utils.get_file(origin=origin, fname="control_sd15_canny.pth")
         if os.path.exists(model_weights_fpath):
             load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping)
