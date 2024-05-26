@@ -16,7 +16,7 @@ import os
 from keras import layers, Sequential,utils
 
 from .ckpt_loader import load_weights_from_file, CKPT_MAPPING
-from .layers import GroupNormalization, AttentionBlock, PaddedConv2D, ResnetBlock
+from .layers import  AttentionBlock, PaddedConv2D, ResnetBlock
 
 
 class ImageDecoder(Sequential):
@@ -48,7 +48,7 @@ class ImageDecoder(Sequential):
                 ResnetBlock(128),
                 ResnetBlock(128),
                 ResnetBlock(128),
-                GroupNormalization(epsilon=1e-5),
+                layers.GroupNormalization(epsilon=1e-5),
                 layers.Activation("swish"),
                 PaddedConv2D(3, 3, padding=1),
             ],

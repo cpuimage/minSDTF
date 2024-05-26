@@ -17,7 +17,7 @@ import tensorflow as tf
 from keras import layers, Model, utils, activations
 
 from .ckpt_loader import load_weights_from_file, CKPT_MAPPING, UNET_KEY_MAPPING
-from .layers import GroupNormalization, PaddedConv2D
+from .layers import PaddedConv2D
 
 
 class ResBlock(layers.Layer):
@@ -25,12 +25,12 @@ class ResBlock(layers.Layer):
         super().__init__(**kwargs)
         self.output_dim = output_dim
         self.entry_flow = [
-            GroupNormalization(epsilon=1e-5, name="norm1"),
+            layers.GroupNormalization(epsilon=1e-5, name="norm1"),
             layers.Activation("swish"),
             PaddedConv2D(output_dim, 3, padding=1, name="conv1")]
         self.embedding_flow = layers.Dense(output_dim, name="time_emb_proj")
         self.exit_flow = [
-            GroupNormalization(epsilon=1e-5, name="norm2"),
+            layers.GroupNormalization(epsilon=1e-5, name="norm2"),
             layers.Activation("swish"),
             PaddedConv2D(output_dim, 3, padding=1, name="conv2")]
 
@@ -55,7 +55,7 @@ class ResBlock(layers.Layer):
 class Attentions(layers.Layer):
     def __init__(self, num_heads, head_size, fully_connected=False, **kwargs):
         super().__init__(**kwargs)
-        self.norm = GroupNormalization(epsilon=1e-5, name="norm")
+        self.norm = layers.GroupNormalization(epsilon=1e-5, name="norm")
         channels = num_heads * head_size
         if fully_connected:
             self.proj_in = layers.Dense(num_heads * head_size, name="proj_in")
@@ -275,7 +275,7 @@ class DiffusionModel(Model):
         x = ResBlock(320, name="up_blocks.3.resnets.2")([x, t_emb])
         x = Attentions(8, 40, fully_connected=False, name="up_blocks.3.attentions.2")([x, context])
         # Exit flow
-        x = GroupNormalization(epsilon=1e-5, name="conv_norm_out")(x)
+        x = layers.GroupNormalization(epsilon=1e-5, name="conv_norm_out")(x)
         x = layers.Activation("swish")(x)
         output = PaddedConv2D(4, kernel_size=3, padding=1, name="conv_out")(x)
         if controls is not None:
