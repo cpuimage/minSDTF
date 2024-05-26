@@ -14,8 +14,7 @@
 import os
 
 import numpy as np
-import tensorflow as tf
-from keras import layers, Model, utils
+from keras import layers, Model, utils, ops
 
 from .ckpt_loader import load_weights_from_file
 
@@ -70,14 +69,14 @@ class CLIPAttention(layers.Layer):
         self.out_proj = layers.Dense(self.embed_dim, name="out_proj")
 
     def reshape_states(self, x, sequence_length, batch_size):
-        x = tf.reshape(
+        x = ops.reshape(
             x, (batch_size, sequence_length, self.num_heads, self.head_dim))
-        return tf.transpose(x, (0, 2, 1, 3))  # bs, heads, sequence_length, head_dim
+        return ops.transpose(x, (0, 2, 1, 3))  # bs, heads, sequence_length, head_dim
 
     def call(self, inputs, attention_mask=None):
         if attention_mask is None and self.causal:
             length = inputs.get_shape().as_list()[1]
-            attention_mask = tf.cast(np.triu(np.ones((1, 1, length, length), dtype="float32") * -np.inf, k=1),
+            attention_mask = ops.cast(np.triu(np.ones((1, 1, length, length), dtype="float32") * -np.inf, k=1),
                                      dtype=self.compute_dtype)
         _, tgt_len, embed_dim = inputs.shape
         query_states = self.q_proj(inputs) * self.scale
@@ -85,24 +84,24 @@ class CLIPAttention(layers.Layer):
         value_states = self.reshape_states(self.v_proj(inputs), tgt_len, -1)
         proj_shape = (-1, tgt_len, self.head_dim)
         query_states = self.reshape_states(query_states, tgt_len, -1)
-        query_states = tf.reshape(query_states, proj_shape)
-        key_states = tf.reshape(key_states, proj_shape)
+        query_states = ops.reshape(query_states, proj_shape)
+        key_states = ops.reshape(key_states, proj_shape)
         src_len = tgt_len
-        value_states = tf.reshape(value_states, proj_shape)
-        attn_weights = query_states @ tf.transpose(key_states, (0, 2, 1))
-        attn_weights = tf.reshape(attn_weights, (-1, self.num_heads, tgt_len, src_len))
+        value_states = ops.reshape(value_states, proj_shape)
+        attn_weights = query_states @ ops.transpose(key_states, (0, 2, 1))
+        attn_weights = ops.reshape(attn_weights, (-1, self.num_heads, tgt_len, src_len))
         attn_weights = attn_weights + attention_mask
-        attn_weights = tf.reshape(attn_weights, (-1, tgt_len, src_len))
-        attn_weights = tf.nn.softmax(attn_weights)
+        attn_weights = ops.reshape(attn_weights, (-1, tgt_len, src_len))
+        attn_weights = ops.nn.softmax(attn_weights)
         attn_output = attn_weights @ value_states
-        attn_output = tf.reshape(attn_output, (-1, self.num_heads, tgt_len, self.head_dim))
-        attn_output = tf.transpose(attn_output, (0, 2, 1, 3))
-        attn_output = tf.reshape(attn_output, (-1, tgt_len, embed_dim))
+        attn_output = ops.reshape(attn_output, (-1, self.num_heads, tgt_len, self.head_dim))
+        attn_output = ops.transpose(attn_output, (0, 2, 1, 3))
+        attn_output = ops.reshape(attn_output, (-1, tgt_len, embed_dim))
         return self.out_proj(attn_output)
 
 
 def quick_gelu(x):
-    return x * tf.sigmoid(x * 1.702)
+    return x * ops.sigmoid(x * 1.702)
 
 
 class TextClipEmbedding(Model):

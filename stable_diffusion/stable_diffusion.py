@@ -26,10 +26,9 @@ Divam Gupta.
 import os
 
 import numpy as np
-import tensorflow as tf
 import torch
 from PIL import Image
-from keras import utils
+from keras import utils, random
 from scipy.ndimage import correlate1d
 
 from .ckpt_loader import load_weights_from_lora
@@ -371,7 +370,7 @@ class StableDiffusionBase:
         e_tacos = model.encode_text("Tacos at dawn")
         e_watermelons = model.encode_text("Watermelons at dusk")
 
-        e_interpolated = tf.linspace(e_tacos, e_watermelons, batch_size)
+        e_interpolated = np.linspace(e_tacos, e_watermelons, batch_size)
         images = model.generate_image(e_interpolated, batch_size=batch_size)
         ```
         """
@@ -554,19 +553,8 @@ class StableDiffusionBase:
         return np.repeat(embedding, batch_size, axis=0)
 
     def _get_initial_diffusion_noise(self, batch_size, seed):
-        if seed is not None:
-            try:
-                seed = int(seed)
-            except:
-                seed = None
-            return tf.random.stateless_normal(
-                (batch_size, self.img_height // 8, self.img_width // 8, 4),
-                seed=[seed, seed],
-            )
-        else:
-            return tf.random.normal(
-                (batch_size, self.img_height // 8, self.img_width // 8, 4)
-            )
+        return random.normal(
+            (batch_size, self.img_height // 8, self.img_width // 8, 4), seed=seed)
 
     def _get_initial_diffusion_latent(self, batch_size, init_latent=None, init_time=None, seed=None,
                                       noise=None):

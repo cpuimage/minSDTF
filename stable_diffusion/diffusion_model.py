@@ -13,8 +13,7 @@
 # limitations under the License.
 import os
 
-import tensorflow as tf
-from keras import layers, Model, utils, activations
+from keras import layers, Model, utils, activations, ops
 
 from .ckpt_loader import load_weights_from_file, CKPT_MAPPING, UNET_KEY_MAPPING
 from .layers import PaddedConv2D
@@ -69,13 +68,13 @@ class Attentions(layers.Layer):
 
     def call(self, inputs):
         inputs, context = inputs
-        batch_size = tf.shape(inputs)[0]
+        batch_size = ops.shape(inputs)[0]
         h, w, c = inputs.get_shape().as_list()[1:]
         x = self.norm(inputs)
         x = self.proj_in(x)
-        x = tf.reshape(x, (batch_size, h * w, c))
+        x = ops.reshape(x, (batch_size, h * w, c))
         x = self.transformer_block([x, context])
-        x = tf.reshape(x, (batch_size, h, w, c))
+        x = ops.reshape(x, (batch_size, h, w, c))
         return self.proj_out(x) + inputs
 
 
@@ -111,22 +110,22 @@ class CrossAttention(layers.Layer):
     def call(self, inputs, context=None):
         context = inputs if context is None else context
         q, k, v = self.to_q(inputs), self.to_k(context), self.to_v(context)
-        batch_size = tf.shape(inputs)[0]
-        q = tf.reshape(q, (batch_size, inputs.shape[1], self.num_heads, self.head_size))
-        k = tf.reshape(k, (batch_size, -1, self.num_heads, self.head_size))
-        v = tf.reshape(v, (batch_size, -1, self.num_heads, self.head_size))
+        batch_size = ops.shape(inputs)[0]
+        q = ops.reshape(q, (batch_size, inputs.shape[1], self.num_heads, self.head_size))
+        k = ops.reshape(k, (batch_size, -1, self.num_heads, self.head_size))
+        v = ops.reshape(v, (batch_size, -1, self.num_heads, self.head_size))
 
-        q = tf.transpose(q, (0, 2, 1, 3))  # (bs, num_heads, time, head_size)
-        k = tf.transpose(k, (0, 2, 3, 1))  # (bs, num_heads, head_size, time)
-        v = tf.transpose(v, (0, 2, 1, 3))  # (bs, num_heads, time, head_size)
+        q = ops.transpose(q, (0, 2, 1, 3))  # (bs, num_heads, time, head_size)
+        k = ops.transpose(k, (0, 2, 3, 1))  # (bs, num_heads, head_size, time)
+        v = ops.transpose(v, (0, 2, 1, 3))  # (bs, num_heads, time, head_size)
 
         # score = td_dot(q, k) * self.scale
-        score = tf.einsum('bnqh,bnhk->bnqk', q, k) * self.scale
+        score = ops.einsum('bnqh,bnhk->bnqk', q, k) * self.scale
         weights = activations.softmax(score)  # (bs, num_heads, time, time)
         # attn = td_dot(weights, v)
-        attn = tf.einsum('bnqk,bnkh->bnqh', weights, v)
-        attn = tf.transpose(attn, (0, 2, 1, 3))  # (bs, time, num_heads, head_size)
-        out = tf.reshape(attn, (-1, inputs.shape[1], self.num_heads * self.head_size))
+        attn = ops.einsum('bnqk,bnkh->bnqh', weights, v)
+        attn = ops.transpose(attn, (0, 2, 1, 3))  # (bs, time, num_heads, head_size)
+        out = ops.reshape(attn, (-1, inputs.shape[1], self.num_heads * self.head_size))
         return self.out_proj(out)
 
 
@@ -155,10 +154,10 @@ class GEGLU(layers.Layer):
 
 
 def td_dot(a, b):
-    aa = tf.reshape(a, (-1, a.shape[2], a.shape[3]))
-    bb = tf.reshape(b, (-1, b.shape[2], b.shape[3]))
+    aa = ops.reshape(a, (-1, a.shape[2], a.shape[3]))
+    bb = ops.reshape(b, (-1, b.shape[2], b.shape[3]))
     cc = layers.Dot(axes=(2, 1))([aa, bb])
-    return tf.reshape(cc, (-1, a.shape[1], cc.shape[1], cc.shape[2]))
+    return ops.reshape(cc, (-1, a.shape[1], cc.shape[1], cc.shape[2]))
 
 
 class DiffusionModel(Model):

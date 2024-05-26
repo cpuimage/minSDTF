@@ -13,8 +13,7 @@
 # limitations under the License.
 import os
 
-import tensorflow as tf
-from keras import layers, Sequential,utils
+from keras import layers, Sequential, utils, ops
 from .layers import AttentionBlock, PaddedConv2D, ResnetBlock
 from .ckpt_loader import load_weights_from_file, CKPT_MAPPING
 
@@ -45,7 +44,7 @@ class ImageEncoder(Sequential):
                 layers.Activation("swish"),
                 PaddedConv2D(8, 3, padding=1),
                 PaddedConv2D(8, 1),
-                layers.Lambda(lambda x: tf.split(x, num_or_size_splits=2, axis=-1)[0] * 0.18215),
+                layers.Lambda(lambda x: ops.split(x, 2, axis=-1)[0] * 0.18215),
             ])
         origin = "https://huggingface.co/stabilityai/sd-vae-ft-mse/resolve/main/diffusion_pytorch_model.safetensors"
         ckpt_mapping = CKPT_MAPPING["encoder"]
