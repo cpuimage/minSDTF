@@ -1,31 +1,31 @@
 import os
 
-import tensorflow as tf
+from keras import layers, Model, Sequential, utils
 
 from .ckpt_loader import load_weights_from_file, CKPT_MAPPING
 from .diffusion_model import Attentions, ResBlock
 from .layers import PaddedConv2D
 
 
-class HintNet(tf.keras.Sequential):
+class HintNet(Sequential):
     def __init__(self, img_height=512, img_width=512, name=None, controlnet_path=None):
         super().__init__(
             [
-                tf.keras.layers.Input((img_height, img_width, 3)),
+                layers.Input((img_height, img_width, 3)),
                 PaddedConv2D(16, kernel_size=3, padding=1),
-                tf.keras.layers.Activation("swish"),
+                layers.Activation("swish"),
                 PaddedConv2D(16, kernel_size=3, padding=1),
-                tf.keras.layers.Activation("swish"),
+                layers.Activation("swish"),
                 PaddedConv2D(32, kernel_size=3, padding=1, strides=2),
-                tf.keras.layers.Activation("swish"),
+                layers.Activation("swish"),
                 PaddedConv2D(32, kernel_size=3, padding=1),
-                tf.keras.layers.Activation("swish"),
+                layers.Activation("swish"),
                 PaddedConv2D(96, kernel_size=3, padding=1, strides=2),
-                tf.keras.layers.Activation("swish"),
+                layers.Activation("swish"),
                 PaddedConv2D(96, kernel_size=3, padding=1),
-                tf.keras.layers.Activation("swish"),
+                layers.Activation("swish"),
                 PaddedConv2D(256, kernel_size=3, padding=1, strides=2),
-                tf.keras.layers.Activation("swish"),
+                layers.Activation("swish"),
                 PaddedConv2D(320, kernel_size=3, padding=1),
             ],
             name=name)
@@ -37,21 +37,21 @@ class HintNet(tf.keras.Sequential):
                 return
             else:
                 origin = controlnet_path
-        model_weights_fpath = tf.keras.utils.get_file(origin=origin, fname="control_sd15_canny.pth")
+        model_weights_fpath = utils.get_file(origin=origin, fname="control_sd15_canny.pth")
         if os.path.exists(model_weights_fpath):
             load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping)
 
 
-class ControlNet(tf.keras.Model):
+class ControlNet(Model):
     def __init__(self, img_height=512, img_width=512, name=None, controlnet_path=None):
-        context = tf.keras.layers.Input((None, 768))
-        t_embed_input = tf.keras.layers.Input((320,))
-        latent = tf.keras.layers.Input((img_height // 8, img_width // 8, 4))
-        hint_out = tf.keras.layers.Input((img_height // 8, img_width // 8, 320))
-        t_emb = tf.keras.layers.Dense(1280, name="time_embedding.linear_1")(t_embed_input)
-        t_emb = tf.keras.layers.Activation("swish")(t_emb)
-        t_emb = tf.keras.layers.Dense(1280, name="time_embedding.linear_2",
-                                      activation=tf.keras.layers.Activation("swish"))(t_emb)
+        context = layers.Input((None, 768))
+        t_embed_input = layers.Input((320,))
+        latent = layers.Input((img_height // 8, img_width // 8, 4))
+        hint_out = layers.Input((img_height // 8, img_width // 8, 320))
+        t_emb = layers.Dense(1280, name="time_embedding.linear_1")(t_embed_input)
+        t_emb = layers.Activation("swish")(t_emb)
+        t_emb = layers.Dense(1280, name="time_embedding.linear_2",
+                             activation=layers.Activation("swish"))(t_emb)
         outputs = []
         x = PaddedConv2D(320, kernel_size=3, padding=1)(latent) + hint_out
         outputs.append(x)
@@ -113,6 +113,6 @@ class ControlNet(tf.keras.Model):
                 return
             else:
                 origin = controlnet_path
-        model_weights_fpath = tf.keras.utils.get_file(origin=origin, fname="control_sd15_canny.pth")
+        model_weights_fpath = utils.get_file(origin=origin, fname="control_sd15_canny.pth")
         if os.path.exists(model_weights_fpath):
             load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping)

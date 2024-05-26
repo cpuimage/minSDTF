@@ -15,15 +15,16 @@ import os
 
 import numpy as np
 import tensorflow as tf
+from keras import layers, Model, utils
 
 from .ckpt_loader import load_weights_from_file
 
 
-class CLIPEmbedding(tf.keras.layers.Layer):
+class CLIPEmbedding(layers.Layer):
     def __init__(self, input_dim=49408, output_dim=768, max_length=77, **kwargs):
         super().__init__(**kwargs)
-        self.token_embedding = tf.keras.layers.Embedding(input_dim, output_dim, name="token_embedding")
-        self.position_embedding = tf.keras.layers.Embedding(max_length, output_dim, name="position_embedding")
+        self.token_embedding = layers.Embedding(input_dim, output_dim, name="token_embedding")
+        self.position_embedding = layers.Embedding(max_length, output_dim, name="position_embedding")
 
     def call(self, inputs):
         tokens, positions = inputs
@@ -32,14 +33,14 @@ class CLIPEmbedding(tf.keras.layers.Layer):
         return tokens + positions
 
 
-class CLIPEncoderLayer(tf.keras.layers.Layer):
+class CLIPEncoderLayer(layers.Layer):
     def __init__(self, embed_dim, num_heads, activation=None, **kwargs):
         super().__init__(**kwargs)
-        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm1")
+        self.layer_norm1 = layers.LayerNormalization(epsilon=1e-5, name="layer_norm1")
         self.clip_attn = CLIPAttention(embed_dim, num_heads, causal=True, name="self_attn")
-        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm2")
-        self.fc1 = tf.keras.layers.Dense(embed_dim * 4, name="mlp.fc1")
-        self.fc2 = tf.keras.layers.Dense(embed_dim, name="mlp.fc2")
+        self.layer_norm2 = layers.LayerNormalization(epsilon=1e-5, name="layer_norm2")
+        self.fc1 = layers.Dense(embed_dim * 4, name="mlp.fc1")
+        self.fc2 = layers.Dense(embed_dim, name="mlp.fc2")
         self.activation = activation
 
     def call(self, inputs):
@@ -55,7 +56,7 @@ class CLIPEncoderLayer(tf.keras.layers.Layer):
         return x + residual
 
 
-class CLIPAttention(tf.keras.layers.Layer):
+class CLIPAttention(layers.Layer):
     def __init__(self, embed_dim=768, num_heads=12, causal=True, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = embed_dim
@@ -63,10 +64,10 @@ class CLIPAttention(tf.keras.layers.Layer):
         self.causal = causal
         self.head_dim = self.embed_dim // self.num_heads
         self.scale = self.head_dim ** -0.5
-        self.q_proj = tf.keras.layers.Dense(self.embed_dim, name="q_proj")
-        self.k_proj = tf.keras.layers.Dense(self.embed_dim, name="k_proj")
-        self.v_proj = tf.keras.layers.Dense(self.embed_dim, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(self.embed_dim, name="out_proj")
+        self.q_proj = layers.Dense(self.embed_dim, name="q_proj")
+        self.k_proj = layers.Dense(self.embed_dim, name="k_proj")
+        self.v_proj = layers.Dense(self.embed_dim, name="v_proj")
+        self.out_proj = layers.Dense(self.embed_dim, name="out_proj")
 
     def reshape_states(self, x, sequence_length, batch_size):
         x = tf.reshape(
@@ -104,10 +105,10 @@ def quick_gelu(x):
     return x * tf.sigmoid(x * 1.702)
 
 
-class TextClipEmbedding(tf.keras.Model):
+class TextClipEmbedding(Model):
     def __init__(self, max_length, embed_dim=768, vocab_size=49408, name=None, ckpt_path=None):
-        tokens = tf.keras.layers.Input(shape=(max_length,), dtype="int32", name="tokens")
-        positions = tf.keras.layers.Input(shape=(max_length,), dtype="int32", name="positions")
+        tokens = layers.Input(shape=(max_length,), dtype="int32", name="tokens")
+        positions = layers.Input(shape=(max_length,), dtype="int32", name="positions")
         clip_emb = CLIPEmbedding(vocab_size, embed_dim, max_length, name="embeddings")([tokens, positions])
         super().__init__([tokens, positions], clip_emb, name=name)
         origin = "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/text_encoder/model.safetensors"
@@ -119,22 +120,22 @@ class TextClipEmbedding(tf.keras.Model):
                 return
             else:
                 origin = ckpt_path
-        model_weights_fpath = tf.keras.utils.get_file(origin=origin, fname="text_encoder.safetensors")
+        model_weights_fpath = utils.get_file(origin=origin, fname="text_encoder.safetensors")
         if os.path.exists(model_weights_fpath):
             load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping)
 
 
-class TextEncoder(tf.keras.Model):
+class TextEncoder(Model):
     def __init__(self, max_length=77, embed_dim=768, num_heads=12, num_layers=12, clip_skip=-2, name=None,
                  ckpt_path=None, lora_dict=None):
-        clip_emb = tf.keras.layers.Input(shape=(max_length, embed_dim), dtype="float32", name="clip_emb")
+        clip_emb = layers.Input(shape=(max_length, embed_dim), dtype="float32", name="clip_emb")
         x = clip_emb
         out = []
         for idx in range(num_layers):
             x = CLIPEncoderLayer(embed_dim, num_heads, activation=quick_gelu,
                                  name="text_model.encoder.layers.{}".format(idx))(x)
             out.append(x)
-        embedded = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="text_model.final_layer_norm")(out[clip_skip])
+        embedded = layers.LayerNormalization(epsilon=1e-5, name="text_model.final_layer_norm")(out[clip_skip])
         super().__init__(clip_emb, embedded, name=name)
         origin = "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/text_encoder/model.safetensors"
         ckpt_mapping = []
@@ -164,6 +165,6 @@ class TextEncoder(tf.keras.Model):
                 return
             else:
                 origin = ckpt_path
-        model_weights_fpath = tf.keras.utils.get_file(origin=origin, fname="text_encoder.safetensors")
+        model_weights_fpath = utils.get_file(origin=origin, fname="text_encoder.safetensors")
         if os.path.exists(model_weights_fpath):
             load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping, lora_dict=lora_dict)

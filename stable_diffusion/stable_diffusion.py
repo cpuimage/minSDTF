@@ -29,6 +29,7 @@ import numpy as np
 import tensorflow as tf
 import torch
 from PIL import Image
+from keras import utils
 from scipy.ndimage import correlate1d
 
 from .ckpt_loader import load_weights_from_lora
@@ -188,7 +189,7 @@ class StableDiffusionBase:
         Example:
 
         ```python
-        from keras_cv.models import StableDiffusion
+        from stable_diffusion import StableDiffusion
 
         model = StableDiffusion(img_height=512, img_width=512, jit_compile=True)
         encoded_text  = model.encode_text("Tacos at dawn")
@@ -363,7 +364,7 @@ class StableDiffusionBase:
         Example:
 
         ```python
-        from keras_cv.models import StableDiffusion
+        from stable_diffusion import StableDiffusion
 
         batch_size = 8
         model = StableDiffusion(img_height=512, img_width=512, jit_compile=True)
@@ -421,7 +422,7 @@ class StableDiffusionBase:
                                                     init_time=init_time,
                                                     seed=seed,
                                                     noise=diffusion_noise)
-        progbar = tf.keras.utils.Progbar(len(timesteps))
+        progbar = utils.Progbar(len(timesteps))
         iteration = 0
         hint_img = None
         if control_net_image is not None:
@@ -609,7 +610,7 @@ class StableDiffusion(StableDiffusionBase):
     Example:
 
     ```python
-    from keras_cv.models import StableDiffusion
+    from stable_diffusion import StableDiffusion
     from PIL import Image
 
     model = StableDiffusion(img_height=512, img_width=512, jit_compile=True)

@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import tensorflow as tf
+from keras import layers, initializers, regularizers, constraints, activations
 
 
-class GroupNormalization(tf.keras.layers.Layer):
+class GroupNormalization(layers.Layer):
     """Group normalization layer.
 
     Group Normalization divides the channels into groups and computes
@@ -83,12 +84,12 @@ class GroupNormalization(tf.keras.layers.Layer):
         self.epsilon = epsilon
         self.center = center
         self.scale = scale
-        self.beta_initializer = tf.keras.initializers.get(beta_initializer)
-        self.gamma_initializer = tf.keras.initializers.get(gamma_initializer)
-        self.beta_regularizer = tf.keras.regularizers.get(beta_regularizer)
-        self.gamma_regularizer = tf.keras.regularizers.get(gamma_regularizer)
-        self.beta_constraint = tf.keras.constraints.get(beta_constraint)
-        self.gamma_constraint = tf.keras.constraints.get(gamma_constraint)
+        self.beta_initializer = initializers.get(beta_initializer)
+        self.gamma_initializer = initializers.get(gamma_initializer)
+        self.beta_regularizer = regularizers.get(beta_regularizer)
+        self.gamma_regularizer = regularizers.get(gamma_regularizer)
+        self.beta_constraint = constraints.get(beta_constraint)
+        self.gamma_constraint = constraints.get(gamma_constraint)
 
     def validate_axis(self, axis, input_shape):
         """Validate an axis value and returns its standardized form.
@@ -146,9 +147,6 @@ class GroupNormalization(tf.keras.layers.Layer):
             raise ValueError(
                 f"Number of groups ({self.groups}) must be a multiple "
                 f"of the number of channels ({dim}).")
-
-        self.input_spec = tf.keras.layers.InputSpec(
-            ndim=len(input_shape), axes={self.axis: dim})
 
         if self.scale:
             self.gamma = self.add_weight(
@@ -214,8 +212,17 @@ class GroupNormalization(tf.keras.layers.Layer):
             beta = tf.reshape(self.beta, broadcast_shape)
         return gamma, beta
 
+    def int_shape(self, x):
+        try:
+            shape = x.shape
+            if not isinstance(shape, tuple):
+                shape = tuple(shape.as_list())
+            return shape
+        except ValueError:
+            return None
+
     def _create_broadcast_shape(self, input_shape):
-        broadcast_shape = [1] * tf.keras.backend.int_shape(input_shape)[0]
+        broadcast_shape = [1] * self.int_shape(input_shape)[0]
         broadcast_shape[self.axis] = input_shape[self.axis] // self.groups
         broadcast_shape.insert(self.axis, self.groups)
         return broadcast_shape
@@ -230,37 +237,37 @@ class GroupNormalization(tf.keras.layers.Layer):
             "epsilon": self.epsilon,
             "center": self.center,
             "scale": self.scale,
-            "beta_initializer": tf.keras.initializers.serialize(self.beta_initializer),
-            "gamma_initializer": tf.keras.initializers.serialize(self.gamma_initializer),
-            "beta_regularizer": tf.keras.regularizers.serialize(self.beta_regularizer),
-            "gamma_regularizer": tf.keras.regularizers.serialize(self.gamma_regularizer),
-            "beta_constraint": tf.keras.constraints.serialize(self.beta_constraint),
-            "gamma_constraint": tf.keras.constraints.serialize(self.gamma_constraint),
+            "beta_initializer": initializers.serialize(self.beta_initializer),
+            "gamma_initializer": initializers.serialize(self.gamma_initializer),
+            "beta_regularizer": regularizers.serialize(self.beta_regularizer),
+            "gamma_regularizer": regularizers.serialize(self.gamma_regularizer),
+            "beta_constraint": constraints.serialize(self.beta_constraint),
+            "gamma_constraint": constraints.serialize(self.gamma_constraint),
         }
         base_config = super().get_config()
         return {**base_config, **config}
 
 
-class PaddedConv2D(tf.keras.layers.Layer):
+class PaddedConv2D(layers.Layer):
     def __init__(self, filters, kernel_size, padding=0, strides=1, **kwargs):
         super().__init__(**kwargs)
-        self.padding2d = tf.keras.layers.ZeroPadding2D(padding)
-        self.conv2d = tf.keras.layers.Conv2D(filters, kernel_size, strides=strides)
+        self.padding2d = layers.ZeroPadding2D(padding)
+        self.conv2d = layers.Conv2D(filters, kernel_size, strides=strides)
 
     def call(self, inputs):
         x = self.padding2d(inputs)
         return self.conv2d(x)
 
 
-class AttentionBlock(tf.keras.layers.Layer):
+class AttentionBlock(layers.Layer):
     def __init__(self, output_dim, **kwargs):
         super().__init__(**kwargs)
         self.output_dim = output_dim
         self.norm = GroupNormalization(epsilon=1e-5)
-        self.q = tf.keras.layers.Dense(output_dim, use_bias=True, )
-        self.k = tf.keras.layers.Dense(output_dim, use_bias=True, )
-        self.v = tf.keras.layers.Dense(output_dim, use_bias=True, )
-        self.proj_out = tf.keras.layers.Dense(output_dim, use_bias=True, )
+        self.q = layers.Dense(output_dim, use_bias=True, )
+        self.k = layers.Dense(output_dim, use_bias=True, )
+        self.v = layers.Dense(output_dim, use_bias=True, )
+        self.proj_out = layers.Dense(output_dim, use_bias=True, )
 
     def call(self, inputs):
         x = self.norm(inputs)
@@ -274,7 +281,7 @@ class AttentionBlock(tf.keras.layers.Layer):
         k = tf.reshape(k, (-1, c, h * w))  # b, c, hw
         y = q @ k
         y = y * 1 / tf.sqrt(tf.cast(c, self.compute_dtype))
-        y = tf.keras.activations.softmax(y)
+        y = activations.softmax(y)
 
         # Attend to values
         v = tf.transpose(v, (0, 3, 1, 2))
@@ -286,7 +293,7 @@ class AttentionBlock(tf.keras.layers.Layer):
         return self.proj_out(x) + inputs
 
 
-class ResnetBlock(tf.keras.layers.Layer):
+class ResnetBlock(layers.Layer):
     def __init__(self, output_dim, **kwargs):
         super().__init__(**kwargs)
         self.output_dim = output_dim
@@ -302,6 +309,6 @@ class ResnetBlock(tf.keras.layers.Layer):
             self.residual_projection = lambda x: x
 
     def call(self, inputs):
-        x = self.conv1(tf.keras.activations.swish(self.norm1(inputs)))
-        x = self.conv2(tf.keras.activations.swish(self.norm2(x)))
+        x = self.conv1(activations.silu(self.norm1(inputs)))
+        x = self.conv2(activations.silu(self.norm2(x)))
         return x + self.residual_projection(inputs)

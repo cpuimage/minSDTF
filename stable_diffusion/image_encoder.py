@@ -14,18 +14,18 @@
 import os
 
 import tensorflow as tf
-
+from keras import layers, Sequential,utils
 from .layers import GroupNormalization, AttentionBlock, PaddedConv2D, ResnetBlock
 from .ckpt_loader import load_weights_from_file, CKPT_MAPPING
 
 
-class ImageEncoder(tf.keras.Sequential):
+class ImageEncoder(Sequential):
     """ImageEncoder is the VAE Encoder for StableDiffusion."""
 
     def __init__(self, ckpt_path=None):
         super().__init__(
             [
-                tf.keras.layers.Input((None, None, 3)),
+                layers.Input((None, None, 3)),
                 PaddedConv2D(128, 3, padding=1),
                 ResnetBlock(128),
                 ResnetBlock(128),
@@ -42,10 +42,10 @@ class ImageEncoder(tf.keras.Sequential):
                 AttentionBlock(512),
                 ResnetBlock(512),
                 GroupNormalization(epsilon=1e-5),
-                tf.keras.layers.Activation("swish"),
+                layers.Activation("swish"),
                 PaddedConv2D(8, 3, padding=1),
                 PaddedConv2D(8, 1),
-                tf.keras.layers.Lambda(lambda x: tf.split(x, num_or_size_splits=2, axis=-1)[0] * 0.18215),
+                layers.Lambda(lambda x: tf.split(x, num_or_size_splits=2, axis=-1)[0] * 0.18215),
             ])
         origin = "https://huggingface.co/stabilityai/sd-vae-ft-mse/resolve/main/diffusion_pytorch_model.safetensors"
         ckpt_mapping = CKPT_MAPPING["encoder"]
@@ -55,6 +55,6 @@ class ImageEncoder(tf.keras.Sequential):
                 return
             else:
                 origin = ckpt_path
-        model_weights_fpath = tf.keras.utils.get_file(origin=origin, fname="image_encoder_sd15.safetensors")
+        model_weights_fpath = utils.get_file(origin=origin, fname="image_encoder_sd15.safetensors")
         if os.path.exists(model_weights_fpath):
             load_weights_from_file(self, model_weights_fpath, ckpt_mapping=ckpt_mapping)
