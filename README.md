@@ -177,9 +177,11 @@ Licenses for borrowed code can be found in following link:
 
 ## Reach me on
 
-- WeChat: DbgMonks
-- QQ: 200759103
-- E-Mail: gaozhihan@vip.qq.com
+   - [![Telegram Badge](https://img.shields.io/badge/cpuimage-blue?style=flat&logo=telegram&logoColor=white)](https://t.me/cpuimage)
+   - ![Wechat Badge](https://img.shields.io/badge/DbgMonks-7BB32E?style=flat&logo=wechat&logoColor=white)
+   - ![QQ Badge](https://img.shields.io/badge/200759103-blue?style=flat&logo=tencent-qq&logoColor=white) 
+   - [![mail Badge](https://img.shields.io/badge/gaozhihan@vip.qq.com-D14836?logo=gmail&logoColor=white)](mailto:gaozhihan@vip.qq.com)
+
 
 ## Donating
 
