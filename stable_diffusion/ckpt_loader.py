@@ -2148,7 +2148,7 @@ def load_weights_from_file(self, ckpt_path, ckpt_mapping, key_mapping=None, lora
     module_weights = []
     keys = state_dict.keys()
     if lora_dict is not None:
-        lora_keys = lora_dict.keys()
+        lora_keys = list(lora_dict.keys())
     else:
         lora_keys = []
     lora_count = len(lora_keys)
@@ -2174,6 +2174,10 @@ def load_weights_from_file(self, ckpt_path, ckpt_mapping, key_mapping=None, lora
                 if lora_w is not None:
                     w = w + lora_w
                     lora_idx += 1
+                    if key in lora_keys:
+                        lora_keys.pop(lora_keys.index(key))
+                    else:
+                        lora_keys.pop(lora_keys.index(key_mapping.get(key)))
             if perm is not None:
                 w = np.transpose(w, perm)
         if weights[i].shape != w.shape:
@@ -2184,6 +2188,7 @@ def load_weights_from_file(self, ckpt_path, ckpt_mapping, key_mapping=None, lora
             print("Apply {} lora weights".format(lora_count))
         else:
             print("Apply {}/{} lora weights".format(lora_idx, lora_count))
+            print("Failed to apply lora list: {}".format(lora_keys))
     self.set_weights(module_weights)
     print("Loaded %d weights for %s" % (len(module_weights), self.name))
 
@@ -2209,13 +2214,23 @@ def load_weights_from_lora(ckpt_path):
             lora_down = state_dict[name + ".lora_down.weight"]
             lora_up = state_dict[name + ".lora_up.weight"]
             if isinstance(lora_down, torch.Tensor):
-                lora_down = lora_down.detach().to(torch.float).cpu().numpy()
+                lora_down = lora_down.detach().to(torch.float).cpu()
             if isinstance(lora_up, torch.Tensor):
-                lora_up = lora_up.detach().to(torch.float).cpu().numpy()
+                lora_up = lora_up.detach().to(torch.float).cpu()
             if isinstance(alpha, torch.Tensor):
-                alpha = alpha.detach().to(torch.float).cpu().numpy()
+                alpha = alpha.detach().to(torch.float).cpu()
             rank = float(lora_up.shape[1])
-            w = np.einsum("ab...,bc...->ac...", lora_up, lora_down) * (alpha / rank)
+            scale = alpha.numpy() / rank
+            if len(lora_down.size()) == 2:
+                # linear
+                w = torch.mm(lora_up, lora_down)
+            elif lora_down.size()[2:4] == (1, 1):
+                # conv2d 1x1
+                w = (lora_up.squeeze(3).squeeze(2) @ lora_down.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3)
+            else:
+                # conv2d 3x3
+                w = torch.nn.functional.conv2d(lora_down.permute(1, 0, 2, 3), lora_up).permute(1, 0, 2, 3)
+            w = w.numpy() * scale
             str_key = str(key)
             # todo : a more elegant implementation is needed
             if str_key.startswith("lora_te_text_model"):
@@ -2232,7 +2247,11 @@ def load_weights_from_lora(ckpt_path):
                 restore_name = name.replace("lora_unet_", '')
                 restore_name = restore_name.replace("down_blocks_", 'down_blocks.')
                 restore_name = restore_name.replace("up_blocks_", 'up_blocks.')
-                restore_name = restore_name.replace("_attentions_", '.attentions.')
+                restore_name = restore_name.replace("mid_block_", 'mid_block.')
+                restore_name = restore_name.replace("resnets_", 'resnets.')
+                restore_name = restore_name.replace("_resnets", '.resnets')
+                restore_name = restore_name.replace("_attentions", '.attentions')
+                restore_name = restore_name.replace("attentions_", 'attentions.')
                 restore_name = restore_name.replace("_transformer_blocks_", '.transformer_blocks.')
                 restore_name = restore_name.replace("_proj_in", '.proj_in.weight')
                 restore_name = restore_name.replace("_proj_out", '.proj_out.weight')
@@ -2246,6 +2265,12 @@ def load_weights_from_lora(ckpt_path):
                 restore_name = restore_name.replace("_attn2_to_out_0", '.attn2.to_out.0.weight')
                 restore_name = restore_name.replace("_ff_net_0_proj", '.ff.net.0.proj.weight')
                 restore_name = restore_name.replace("_ff_net_2", '.ff.net.2.weight')
+                restore_name = restore_name.replace("_time_emb_proj", '.time_emb_proj.weight')
+                restore_name = restore_name.replace("_conv_shortcut", '.conv_shortcut.weight')
+                restore_name = restore_name.replace("_downsamplers_0_conv", ".downsamplers.0.conv.weight")
+                restore_name = restore_name.replace("_upsamplers_0_conv", ".upsamplers.0.conv.weight")
+                restore_name = restore_name.replace("_conv2", '.conv2.weight')
+                restore_name = restore_name.replace("_conv1", '.conv1.weight')
                 unet_state_dict[restore_name] = w
     print("lora dict:[{}] done.".format(ckpt_path))
     return text_encoder_state_dict, unet_state_dict
