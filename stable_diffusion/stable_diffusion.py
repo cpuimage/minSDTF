@@ -52,7 +52,7 @@ class StableDiffusionBase:
             img_height=512,
             img_width=512,
             jit_compile=False,
-            active_lcm=False):
+            active_tcd=False):
         self.img_height = img_height
         self.img_width = img_width
         # lazy initialize the component models and the tokenizer
@@ -65,8 +65,8 @@ class StableDiffusionBase:
         self._image_decoder = None
         self._tokenizer = None
         self.jit_compile = jit_compile
-        self.active_lcm = active_lcm
-        self.scheduler = Scheduler(active_lcm=active_lcm)
+        self.active_tcd = active_tcd
+        self.scheduler = Scheduler(active_tcd=active_tcd)
 
     def load_embedding(self, embedding_path):
         embedding = None
@@ -628,8 +628,8 @@ class StableDiffusion(StableDiffusionBase):
             vae_ckpt=None,
             lora_path=None,
             controlnet_path=None,
-            active_lcm=False):
-        super().__init__(img_height, img_width, jit_compile, active_lcm)
+            active_tcd=False):
+        super().__init__(img_height, img_width, jit_compile, active_tcd)
         self.clip_skip = clip_skip
         self.unet_ckpt = unet_ckpt
         self.text_encoder_ckpt = text_encoder_ckpt

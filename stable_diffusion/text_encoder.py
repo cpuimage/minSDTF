@@ -75,9 +75,9 @@ class CLIPAttention(layers.Layer):
 
     def call(self, inputs, attention_mask=None):
         if attention_mask is None and self.causal:
-            length = inputs.get_shape().as_list()[1]
+            length = ops.shape(inputs)[1]
             attention_mask = ops.cast(np.triu(np.ones((1, 1, length, length), dtype="float32") * -np.inf, k=1),
-                                     dtype=self.compute_dtype)
+                                      dtype=self.compute_dtype)
         _, tgt_len, embed_dim = inputs.shape
         query_states = self.q_proj(inputs) * self.scale
         key_states = self.reshape_states(self.k_proj(inputs), tgt_len, -1)
