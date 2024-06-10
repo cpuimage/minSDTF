@@ -138,7 +138,8 @@ Image.fromarray(img[0]).save("out.jpg")
     - [x] Image To Image
     - [x] Inpainting
     - [x] CFG Rescale
-    - [x] LCM Scheduler
+    - [x] ~~LCM Scheduler~~
+    - [x] TCD Scheduler
     - [ ] Lora
         - [x] Merge
         - [ ] Switch
