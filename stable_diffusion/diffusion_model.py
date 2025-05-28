@@ -82,9 +82,9 @@ class TransformerBlock(layers.Layer):
     def __init__(self, dim, num_heads, head_size, **kwargs):
         super().__init__(**kwargs)
         self.norm1 = layers.LayerNormalization(epsilon=1e-5, name="norm1")
-        self.attn1 = CrossAttention(num_heads, head_size, name="attn1")
+        self.attn1 = CrossAttention(num_heads, head_size, q_chunk_size=16, kv_chunk_size=1, name="attn1")
         self.norm2 = layers.LayerNormalization(epsilon=1e-5, name="norm2")
-        self.attn2 = CrossAttention(num_heads, head_size, name="attn2")
+        self.attn2 = CrossAttention(num_heads, head_size, q_chunk_size=16, kv_chunk_size=1, name="attn2")
         self.norm3 = layers.LayerNormalization(epsilon=1e-5, name="norm3")
         self.geglu = GEGLU(dim * 4, name="ff.net.0")
         self.dense = layers.Dense(dim, name="ff.net.2")
@@ -97,7 +97,7 @@ class TransformerBlock(layers.Layer):
 
 
 class CrossAttention(layers.Layer):
-    def __init__(self, num_heads, head_size, **kwargs):
+    def __init__(self, num_heads, head_size, q_chunk_size=16, kv_chunk_size=1, **kwargs):
         super().__init__(**kwargs)
         self.to_q = layers.Dense(num_heads * head_size, use_bias=False, name="to_q")
         self.to_k = layers.Dense(num_heads * head_size, use_bias=False, name="to_k")
@@ -106,26 +106,74 @@ class CrossAttention(layers.Layer):
         self.num_heads = num_heads
         self.head_size = head_size
         self.out_proj = layers.Dense(num_heads * head_size, name="to_out")
+        self.q_chunk_size = q_chunk_size
+        self.kv_chunk_size = kv_chunk_size
+
+    @staticmethod
+    def _flash_attention(query, key, value, scale, q_chunk_size=1, kv_chunk_size=1):
+        # FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness
+        # https://arxiv.org/abs/2205.14135v2
+        # Self-attention Does Not Need O(n2) Memory
+        # https://arxiv.org/abs/2112.05682v2
+        result = []
+        if kv_chunk_size == 1:
+            q_chunks = ops.split(query, q_chunk_size, axis=1)
+            for q_chunk_idx in range(q_chunk_size):
+                q = q_chunks[q_chunk_idx]
+                score = ops.einsum('bqh,bkh->bqk', q, key) * scale
+                context = ops.softmax(score)
+                acc = ops.einsum('bqk,bkh->bqh', context, value)
+                result.append(acc)
+        else:
+            q_chunks = ops.split(query, q_chunk_size, axis=1)
+            k_chunks = ops.split(key, kv_chunk_size, axis=1)
+            v_chunks = ops.split(value, kv_chunk_size, axis=1)
+            for q_chunk_idx in range(q_chunk_size):
+                global_max = 0.0 - float("inf")
+                global_max_diffs = 0.0
+                acc = 0.0
+                q = q_chunks[q_chunk_idx]
+                for kv_chunk_idx in range(kv_chunk_size):
+                    k = k_chunks[kv_chunk_idx]
+                    v = v_chunks[kv_chunk_idx]
+                    attn_weights = ops.einsum('bqh,bkh->bqk', q, k) * scale
+                    curr_max_score = ops.maximum(ops.max(attn_weights, axis=-1, keepdims=True), global_max)
+                    global_max_diffs = global_max_diffs * ops.exp(global_max - curr_max_score)
+                    exp_weights = ops.exp(attn_weights - curr_max_score)
+                    curr_max_diffs = ops.sum(exp_weights, axis=-1, keepdims=True) + global_max_diffs
+                    acc = (acc * global_max_diffs + ops.einsum('bqk,bkh->bqh', exp_weights, v)) / curr_max_diffs
+                    global_max_diffs = curr_max_diffs
+                    global_max = curr_max_score
+                result.append(acc)
+        return ops.concatenate(result, axis=1)
 
     def call(self, inputs, context=None):
         context = inputs if context is None else context
-        q, k, v = self.to_q(inputs), self.to_k(context), self.to_v(context)
         batch_size = ops.shape(inputs)[0]
-        q = ops.reshape(q, (batch_size, inputs.shape[1], self.num_heads, self.head_size))
-        k = ops.reshape(k, (batch_size, -1, self.num_heads, self.head_size))
-        v = ops.reshape(v, (batch_size, -1, self.num_heads, self.head_size))
-
-        q = ops.transpose(q, (0, 2, 1, 3))  # (bs, num_heads, time, head_size)
-        k = ops.transpose(k, (0, 2, 3, 1))  # (bs, num_heads, head_size, time)
-        v = ops.transpose(v, (0, 2, 1, 3))  # (bs, num_heads, time, head_size)
-
-        # score = td_dot(q, k) * self.scale
-        score = ops.einsum('bnqh,bnhk->bnqk', q, k) * self.scale
-        weights = activations.softmax(score)  # (bs, num_heads, time, time)
-        # attn = td_dot(weights, v)
-        attn = ops.einsum('bnqk,bnkh->bnqh', weights, v)
-        attn = ops.transpose(attn, (0, 2, 1, 3))  # (bs, time, num_heads, head_size)
-        out = ops.reshape(attn, (-1, inputs.shape[1], self.num_heads * self.head_size))
+        q_time = ops.shape(inputs)[1]
+        q = self.to_q(inputs)
+        k = self.to_k(context)
+        v = self.to_v(context)
+        out_shape = (batch_size, q_time, self.num_heads * self.head_size)
+        num_heads_axis = -2
+        v_out = []
+        q_vec = ops.split(q, self.num_heads, axis=-1)
+        k_vec = ops.split(k, self.num_heads, axis=-1)
+        v_vec = ops.split(v, self.num_heads, axis=-1)
+        for idx in range(self.num_heads):
+            q = q_vec[idx]
+            k = k_vec[idx]
+            v = v_vec[idx]
+            if self.q_chunk_size == 1 and self.kv_chunk_size == 1:
+                score = ops.einsum('bqh,bkh->bqk', q, k) * self.scale
+                context = ops.softmax(score)
+                attn = ops.einsum('bqk,bkh->bqh', context, v)
+            else:
+                attn = self._flash_attention(q, k, v, self.scale, q_chunk_size=self.q_chunk_size,
+                                             kv_chunk_size=self.kv_chunk_size)
+            v_out.append(attn)
+        attn = ops.stack(v_out, axis=num_heads_axis)
+        out = ops.reshape(attn, out_shape)
         return self.out_proj(out)
 
 

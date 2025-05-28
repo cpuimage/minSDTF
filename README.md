@@ -140,6 +140,7 @@ Image.fromarray(img[0]).save("out.jpg")
     - [x] CFG Rescale
     - [x] ~~LCM Scheduler~~
     - [x] TCD Scheduler
+    - [x] [Chunked Flash Attention](https://github.com/cpuimage/chunked-flash-attention-keras)
     - [ ] Lora
         - [x] Merge
         - [ ] Switch
@@ -149,7 +150,6 @@ Image.fromarray(img[0]).save("out.jpg")
     - [ ] Highres Fix
     - [ ] Face Restoration
     - [ ] Sampler
-    - [ ] Flash Attention
     - [ ] Multi-language Prompt
     - [ ] Gui
     - [ ] Cache Manager
@@ -189,3 +189,7 @@ Licenses for borrowed code can be found in following link:
 If this project useful for you, please consider buying me a cup of coffee or sponsoring me!
 
 <a href="https://paypal.me/cpuimage/USD10" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/black_img.png" alt="Buy Me A Coffee" style="height: auto !important;width: auto !important;" ></a>
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=cpuimage/minSDTF&type=Date)](https://www.star-history.com/#cpuimage/minSDTF&Date)
